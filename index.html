@@ -221,7 +221,7 @@
     'default': ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-flash-latest'],
     complex: ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-flash-latest']
   };
-  var gDead = {}, gDiscovered = null;
+  var gDead = {}, gDiscovered = null, gNoThink = false;
   function isAnthropicKey(k){ return /^sk-ant-/.test(k); }
 
   function geminiErrCode(status, msg){
@@ -345,7 +345,17 @@
     async function go(models){
       for (var i = 0; i < models.length; i++){
         var m = models[i]; if (tried[m]) continue; tried[m] = 1;
-        try{ return await geminiTry(m, body, key, signal, onDelta); }
+        try{
+          try{ return await geminiTry(m, body, key, signal, onDelta); }
+          catch(e0){
+            /* se il modello non accetta l'impostazione "pensa poco", riprova senza */
+            if (e0 && e0.status === 400 && /think/i.test(e0.message || '') && body.generationConfig.thinkingConfig){
+              gNoThink = true; delete body.generationConfig.thinkingConfig;
+              return await geminiTry(m, body, key, signal, onDelta);
+            }
+            throw e0;
+          }
+        }
         catch(e){
           lastErr = e;
           var skip = e && (e.status === 404 || e.status === 429 || e.status === 500 || e.status === 503 || (e.status === 400 && /model/i.test(e.message || '') && !/API key/i.test(e.message || '')));
@@ -370,6 +380,7 @@
     var full = '', rounds = 0, truncated = false, needSep = false;
     for (;;){
       var body = { contents: contents, generationConfig: { maxOutputTokens: 8192 } };
+      if (!gNoThink) body.generationConfig.thinkingConfig = { thinkingLevel: 'low' };
       if (decls.length) body.tools = [{ functionDeclarations: decls }];
       else if (asJson) body.generationConfig.responseMimeType = 'application/json';
       var round = await geminiRound(tier, body, key, options.signal, function(delta){
@@ -1400,6 +1411,7 @@ button.btn{font-family:inherit;font-size:.92rem;font-weight:700;border:none;bord
 .save-bar .btn{width:100%; padding:16px; font-size:1.02rem; border-radius:20px}
 /* ---- scansione a schermo intero (dopo lo scatto) ---- */
 .scan-screen{position:fixed; inset:0; z-index:85; background:#000; overflow:hidden}
+.scan-cancel{position:absolute; z-index:6; top:calc(env(safe-area-inset-top,0px) + 14px); left:16px; width:40px; height:40px; border-radius:50%; border:1px solid rgba(255,255,255,.25); background:rgba(28,28,32,.55); color:#fff; font-size:1rem; backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); pointer-events:auto; cursor:pointer}
 .scan-screen>img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; animation:scanZoom 6s ease-out both}
 @keyframes scanZoom{from{transform:scale(1)} to{transform:scale(1.06)}}
 .scan-screen .scan-overlay{border-radius:0; background:linear-gradient(180deg, rgba(0,0,0,.35) 0%, rgba(0,0,0,0) 28%, rgba(0,0,0,0) 50%, rgba(0,0,0,.7) 100%)}
@@ -2127,7 +2139,7 @@ button.btn{font-family:inherit;font-size:.92rem;font-weight:700;border:none;bord
     </div>
   </div>
   <input type="file" id="galleryInput" accept="image/*" style="display:none">
-  <div class="scan-screen" id="scanScreen" style="display:none"><img id="scanFrozen" alt=""></div>
+  <div class="scan-screen" id="scanScreen" style="display:none"><img id="scanFrozen" alt=""><button class="scan-cancel" id="scanCancel" aria-label="Annulla">✕</button></div>
 
   <div class="capture-sheet" id="captureCard" style="display:none" role="dialog" aria-modal="true" aria-labelledby="captureTitle">
     <div class="capture-head"><h2 id="captureTitle">Riepilogo piatto</h2><button class="sheet-close" id="captureClose" aria-label="Chiudi">✕</button></div>
@@ -3395,6 +3407,7 @@ function leaveScanScreen(){
   sc.style.display = 'none'; document.getElementById('scanFrozen').removeAttribute('src');
   captureCard.style.display = 'block'; captureCard.scrollTop = 0;
 }
+document.getElementById('scanCancel').addEventListener('click', () => { if (analyzeCtl && analyzeCtl.userCancel) analyzeCtl.userCancel(); });
 function setScanFound(on){ scanOverlay.classList.toggle('found', !!on); }
 function showLiveChips(list){
   scanChips.innerHTML = list.slice(0, 8).map((x,i) => '<span class="scan-chip" style="animation-delay:' + (i*70) + 'ms">' + escHtml(x) + '</span>').join('');
@@ -4197,12 +4210,17 @@ function computeFromFoods(componenti, list){
   return {kcal:Math.round(tot.kcal), proteine_g:Math.round(tot.p), carboidrati_g:Math.round(tot.c), grassi_g:Math.round(tot.g), porzione:tot.grammi ? Math.round(tot.grammi) + ' g' : '', ingredienti:names, righe};
 }
 
+let analyzeCtl = null, analyzeCancelled = false;
 async function analyze(){
   if (!currentImageDataUrl) return;
   scanLabel.textContent = 'Riconosco gli ingredienti…';
   showLiveChips([]); setScanFound(false);
   scanOverlay.style.display = 'flex';
   showError('');
+  const ctl = new AbortController(); analyzeCtl = ctl; let timedOut = false, userCancel = false;
+  analyzeCtl.userCancel = () => { userCancel = true; ctl.abort(); };
+  const tLong = setTimeout(() => { if (!ctl.signal.aborted) scanLabel.textContent = 'Ci vuole un attimo in più…'; }, 9000);
+  const tAbort = setTimeout(() => { timedOut = true; ctl.abort(); }, window.NL_SCAN_TIMEOUT || 50000);
   try{
     if (!sample) sample = await claude.use('sample');
     if (!sample){ showError('Analisi AI non disponibile in questa vista.'); return; }
@@ -4221,7 +4239,8 @@ Procedimento: 1) riconosci ogni ingrediente; 2) stima i grammi reali di ciascuno
 Rispondi SOLO con un oggetto JSON valido, senza testo prima o dopo:
 {"nome":"nome del piatto in italiano","ingredienti":["ingrediente 1","ingrediente 2"],"componenti":[{"id_db":"id dal database oppure null","nome":"ingrediente singolo","grammi":numero,"kcal":numero per quei grammi,"proteine_g":numero,"carboidrati_g":numero,"grassi_g":numero}],"porzione":"peso totale stimato del piatto es. 350 g","kcal":numero totale del piatto,"proteine_g":numero totale,"carboidrati_g":numero totale,"grassi_g":numero totale}
 "ingredienti" contiene al massimo 8 nomi brevi in italiano (es. "pasta", "pomodoro", "tonno").`}];
-    const res = await sample.json(prompt, {images:[blob], modelTier:'default'});
+    const res = await sample.json(prompt, {images:[blob], modelTier:'default', signal:ctl.signal});
+    clearTimeout(tAbort); clearTimeout(tLong);
     if (!res || typeof res !== 'object') throw {code:'invalid_json'};
     const fromDb = foods.length ? computeFromFoods(res.componenti, foods) : null;
     if (fromDb){ Object.assign(res, {kcal:fromDb.kcal, proteine_g:fromDb.proteine_g, carboidrati_g:fromDb.carboidrati_g, grassi_g:fromDb.grassi_g, porzione:fromDb.porzione}); res._ingredienti = fromDb.ingredienti; res._righe = fromDb.righe; res._fromDb = true; }
@@ -4241,13 +4260,22 @@ Rispondi SOLO con un oggetto JSON valido, senza testo prima o dopo:
   }catch(err){
     console.error(err);
     const code = err && (err.code || err.name || err.message) ? String(err.code || err.name || err.message).slice(0, 60) : 'errore';
-    if (err && err.code==='not_granted') showError(window.NL_STANDALONE ? 'Chiave AI mancante o non valida. Vai in Impostazioni › Nome e chiave AI e incolla la chiave (gratis con Google), oppure usa la demo.' : 'Permesso AI non concesso: tocca di nuovo e consenti l\'accesso.');
+    if (err && err.code==='cancelled'){
+      if (timedOut) showError('L\'AI sta impiegando troppo tempo. Controlla la connessione e riprova con «Rifai foto».');
+      else if (userCancel) analyzeCancelled = true;
+    }
+    else if (err && err.code==='not_granted') showError(window.NL_STANDALONE ? 'Chiave AI mancante o non valida. Vai in Impostazioni › Nome e chiave AI e incolla la chiave (gratis con Google), oppure usa la demo.' : 'Permesso AI non concesso: tocca di nuovo e consenti l\'accesso.');
     else if (err && err.code==='rate_limited') showError(window.NL_STANDALONE ? 'Limite di richieste dell\'AI raggiunto (piano gratuito): aspetta un minuto e riprova.' : 'Troppe richieste, riprova tra poco.');
     else if (err && err.code==='images_unavailable') showError('Questa vista non supporta l\'analisi di immagini.');
     else if (err && err.code==='image_rejected') showError('Foto non valida, riprova con un\'altra immagine.');
     else if (err && err.code==='invalid_json') showError('Non ho capito la risposta dell\'AI. Riprova.');
     else showError('Analisi non riuscita (' + code + (window.NL_STANDALONE && err && err.message && err.message !== err.code ? ': ' + String(err.message).slice(0, 160) : '') + '). Riprova.');
-  }finally{ scanOverlay.style.display = 'none'; setScanFound(false); leaveScanScreen(); }
+  }finally{
+    clearTimeout(tAbort); clearTimeout(tLong); analyzeCtl = null;
+    scanOverlay.style.display = 'none'; setScanFound(false);
+    if (analyzeCancelled){ analyzeCancelled = false; leaveScanScreen(); closeCaptureSheet(); openCamScreen('ai'); }
+    else leaveScanScreen();
+  }
 }
 function renderResult(r){
   document.getElementById('resultLabel').textContent = "Riconosciuto dall'AI · tocca per modificare";
