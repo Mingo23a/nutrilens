@@ -214,11 +214,232 @@
     return { blocks: blocks.filter(Boolean), stop: stop };
   }
 
+  /* ---------------- AI gratuita di Google (Gemini, chiave di Google AI Studio) ---------------- */
+  var G_BASE = 'https://generativelanguage.googleapis.com/v1beta/';
+  var G_MODELS = {
+    quick: ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-flash-lite-latest'],
+    'default': ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-flash-latest'],
+    complex: ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-flash-latest']
+  };
+  var gDead = {}, gDiscovered = null;
+  function isAnthropicKey(k){ return /^sk-ant-/.test(k); }
+
+  function geminiErrCode(status, msg){
+    msg = String(msg || '');
+    if (status === 429) return 'rate_limited';
+    if (status === 403 && /location|region|countr|not supported/i.test(msg)) return 'upstream_error';
+    if (status === 401 || status === 403 || /API key|API_KEY|credential|PERMISSION_DENIED/i.test(msg)) return 'not_granted';
+    if (status === 413) return 'prompt_too_large';
+    if (status === 400) return /image|inline|mime|media/i.test(msg) ? 'image_rejected' : 'invalid_request';
+    return 'upstream_error';
+  }
+  function cleanSchema(s){
+    if (Array.isArray(s)) return s.map(cleanSchema);
+    if (s && typeof s === 'object'){
+      var o = {};
+      Object.keys(s).forEach(function(k){ if (k === 'additionalProperties' || k === '$schema') return; o[k] = cleanSchema(s[k]); });
+      return o;
+    }
+    return s;
+  }
+  function toGeminiContents(messages){
+    var contents = [];
+    function push(role, parts){
+      var last = contents[contents.length - 1];
+      if (last && last.role === role) last.parts = last.parts.concat(parts); else contents.push({ role: role, parts: parts });
+    }
+    messages.forEach(function(m){
+      var role = m.role === 'assistant' ? 'model' : 'user', parts = [];
+      if (typeof m.content === 'string'){ if (m.content) parts.push({ text: m.content }); }
+      else (m.content || []).forEach(function(b){
+        if (b.type === 'text' && b.text) parts.push({ text: b.text });
+        else if (b.type === 'image') parts.push({ inlineData: { mimeType: b.source.media_type, data: b.source.data } });
+      });
+      if (parts.length) push(role, parts);
+    });
+    return contents;
+  }
+
+  /* legge uno stream SSE (accetta sia \n\n sia \r\n\r\n) e chiama onEvent per ogni oggetto JSON */
+  async function readSSE(res, onEvent){
+    var reader = res.body.getReader(), dec = new TextDecoder(), buf = '';
+    function handleRaw(raw){
+      var data = raw.split('\n').filter(function(l){ return l.indexOf('data:') === 0; }).map(function(l){ return l.slice(5).trim(); }).join('');
+      if (!data){ var t = raw.trim(); if (t.charAt(0) === '{' || t.charAt(0) === '[') data = t; else return; }
+      var ev; try{ ev = JSON.parse(data); }catch(e){ return; }
+      (Array.isArray(ev) ? ev : [ev]).forEach(onEvent);
+    }
+    try{
+      for (;;){
+        var chunk = await reader.read();
+        if (chunk.done) break;
+        buf = (buf + dec.decode(chunk.value, { stream: true })).replace(/\r\n/g, '\n');
+        var idx;
+        while ((idx = buf.indexOf('\n\n')) !== -1){ var raw = buf.slice(0, idx); buf = buf.slice(idx + 2); handleRaw(raw); }
+      }
+      buf = (buf + dec.decode()).replace(/\r\n/g, '\n');
+      if (buf.trim()) handleRaw(buf);
+    }catch(e){
+      if (e && e.code) throw e;
+      if (e && e.name === 'AbortError') throw err('cancelled');
+      throw err('upstream_error', 'Connessione interrotta');
+    }
+  }
+
+  async function geminiTry(model, body, key, signal, onDelta){
+    var res;
+    try{
+      res = await fetch(G_BASE + 'models/' + model + ':streamGenerateContent?alt=sse', {
+        method: 'POST', signal: signal,
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+        body: JSON.stringify(body)
+      });
+    }catch(e){
+      if (e && e.name === 'AbortError') throw err('cancelled');
+      throw err('upstream_error', 'Rete non raggiungibile: ' + (e && e.message || ''));
+    }
+    if (!res.ok){
+      var j = null; try{ j = await res.json(); }catch(e){}
+      var msg = (j && j.error && j.error.message) || ('HTTP ' + res.status);
+      var e2 = err(geminiErrCode(res.status, msg), msg); e2.status = res.status; throw e2;
+    }
+    var parts = [], finish = null, blocked = null;
+    function isPlain(p){ return p && typeof p.text === 'string' && !p.thought && !p.thoughtSignature && Object.keys(p).length === 1; }
+    await readSSE(res, function(ev){
+      if (ev.error){ throw err(geminiErrCode(ev.error.code, ev.error.message), ev.error.message || 'errore'); }
+      if (ev.promptFeedback && ev.promptFeedback.blockReason) blocked = ev.promptFeedback.blockReason;
+      var c = ev.candidates && ev.candidates[0];
+      if (!c) return;
+      if (c.finishReason) finish = c.finishReason;
+      ((c.content && c.content.parts) || []).forEach(function(p){
+        var last = parts[parts.length - 1];
+        if (isPlain(last) && isPlain(p)) last.text += p.text; else parts.push(p);
+        if (typeof p.text === 'string' && p.text && !p.thought) onDelta(p.text);
+      });
+    });
+    if (!parts.length){
+      var why = blocked || finish;
+      if (why && why !== 'STOP') throw err('upstream_error', 'Risposta bloccata dai filtri di Google (' + why + ')');
+    }
+    return { parts: parts, finish: finish };
+  }
+
+  async function geminiDiscover(key){
+    if (gDiscovered) return gDiscovered;
+    try{
+      var r = await fetch(G_BASE + 'models?pageSize=200', { headers: { 'x-goog-api-key': key } });
+      var j = await r.json(), out = [];
+      (j.models || []).forEach(function(m){
+        var n = String(m.name || '').replace(/^models\//, '');
+        if (/^gemini-[\d.]+-flash(-lite)?$/.test(n) && (m.supportedGenerationMethods || []).indexOf('generateContent') !== -1) out.push(n);
+      });
+      out.sort(function(a, b){ return parseFloat(b.split('-')[1]) - parseFloat(a.split('-')[1]) || (/lite/.test(a) ? 1 : -1); });
+      gDiscovered = out;
+    }catch(e){ gDiscovered = []; }
+    return gDiscovered;
+  }
+
+  /* un giro di richiesta: prova i modelli in ordine; passa al successivo se quello non esiste o ha esaurito la quota gratuita */
+  async function geminiRound(tier, body, key, signal, onDelta){
+    var list = (G_MODELS[tier] || G_MODELS['default']).filter(function(m){ return !gDead[m]; }), lastErr = null, tried = {};
+    async function go(models){
+      for (var i = 0; i < models.length; i++){
+        var m = models[i]; if (tried[m]) continue; tried[m] = 1;
+        try{ return await geminiTry(m, body, key, signal, onDelta); }
+        catch(e){
+          lastErr = e;
+          var skip = e && (e.status === 404 || e.status === 429 || e.status === 500 || e.status === 503 || (e.status === 400 && /model/i.test(e.message || '') && !/API key/i.test(e.message || '')));
+          if (e && e.status === 404) gDead[m] = true;
+          if (!skip) throw e;
+        }
+      }
+      return null;
+    }
+    var r = await go(list);
+    if (!r && lastErr && lastErr.status === 404){
+      r = await go(await geminiDiscover(key));
+    }
+    if (r) return r;
+    throw lastErr || err('upstream_error', 'Nessun modello disponibile');
+  }
+
+  async function runGemini(messages, tools, options, asJson, key){
+    var contents = toGeminiContents(messages);
+    var decls = tools.map(function(t){ return { name: t.name, description: t.description, parameters: cleanSchema(t.inputSchema || { type: 'object', properties: {} }) }; });
+    var tier = options.modelTier || 'default';
+    var full = '', rounds = 0, truncated = false, needSep = false;
+    for (;;){
+      var body = { contents: contents, generationConfig: { maxOutputTokens: 8192 } };
+      if (decls.length) body.tools = [{ functionDeclarations: decls }];
+      else if (asJson) body.generationConfig.responseMimeType = 'application/json';
+      var round = await geminiRound(tier, body, key, options.signal, function(delta){
+        if (needSep && full){ delta = '\n\n' + delta; }
+        needSep = false; full += delta;
+        if (options.onText){ try{ options.onText({ text: full, delta: delta }); }catch(e){ console.error(e); } }
+      });
+      var calls = round.parts.filter(function(p){ return p.functionCall; });
+      if (calls.length && tools.length && rounds < 6){
+        contents.push({ role: 'model', parts: round.parts });
+        var resp = [];
+        for (var u = 0; u < calls.length; u++){
+          var fc = calls[u].functionCall, tool = tools.filter(function(t){ return t.name === fc.name; })[0], out, response;
+          try{
+            if (!tool) throw new Error('strumento sconosciuto');
+            out = await tool.execute(fc.args || {}, { signal: options.signal || new AbortController().signal });
+            response = { result: out === undefined ? null : out };
+          }catch(e){ response = { error: String(e && e.message || e) }; }
+          var fr = { name: fc.name, response: response }; if (fc.id) fr.id = fc.id;
+          resp.push({ functionResponse: fr });
+        }
+        contents.push({ role: 'user', parts: resp });
+        rounds++; needSep = true; continue;
+      }
+      truncated = round.finish === 'MAX_TOKENS';
+      break;
+    }
+    return { full: full, truncated: truncated };
+  }
+
+  /* ---------------- Modalità demo (AI simulata, nessun costo) ---------------- */
+  var DEMO_DISHES = [
+    { nome: 'Spaghetti alla carbonara', ingredienti: ['pasta', 'uova', 'guanciale', 'pecorino'], componenti: [{ id_db: 'spaghetti_alla_carbonara', nome: 'Spaghetti alla carbonara', grammi: 320 }], porzione: '320 g', kcal: 620, proteine_g: 24, carboidrati_g: 78, grassi_g: 22 },
+    { nome: 'Pizza margherita', ingredienti: ['impasto', 'pomodoro', 'mozzarella', 'basilico'], componenti: [{ id_db: 'pizza_margherita', nome: 'Pizza margherita', grammi: 330 }], porzione: '330 g', kcal: 820, proteine_g: 36, carboidrati_g: 105, grassi_g: 26 },
+    { nome: 'Poke bowl al salmone', ingredienti: ['riso', 'salmone', 'avocado', 'edamame'], componenti: [{ id_db: 'poke_bowl_salmone', nome: 'Poke bowl al salmone', grammi: 400 }], porzione: '400 g', kcal: 650, proteine_g: 30, carboidrati_g: 70, grassi_g: 26 },
+    { nome: 'Cotoletta con patate e insalata', ingredienti: ['cotoletta', 'patate', 'insalata'], componenti: [{ id_db: 'cotoletta_alla_milanese', nome: 'Cotoletta', grammi: 180 }, { id_db: 'patate_al_forno', nome: 'Patate al forno', grammi: 200 }, { id_db: 'insalata_mista', nome: 'Insalata', grammi: 80 }], porzione: '460 g', kcal: 900, proteine_g: 40, carboidrati_g: 60, grassi_g: 50 },
+    { nome: 'Colazione con yogurt e frutta', ingredienti: ['yogurt greco', 'fragole', 'fiocchi d\'avena'], componenti: [{ id_db: 'yogurt_greco_0', nome: 'Yogurt greco', grammi: 150 }, { id_db: 'fragole', nome: 'Fragole', grammi: 100 }, { id_db: 'fiocchi_d_avena', nome: 'Fiocchi d\'avena', grammi: 40 }], porzione: '290 g', kcal: 300, proteine_g: 20, carboidrati_g: 35, grassi_g: 6 },
+    { nome: 'Hamburger con patatine', ingredienti: ['hamburger', 'pane', 'patatine'], componenti: [{ id_db: 'hamburger_di_manzo', nome: 'Hamburger', grammi: 220 }, { id_db: 'patatine_fritte', nome: 'Patatine fritte', grammi: 150 }], porzione: '370 g', kcal: 980, proteine_g: 38, carboidrati_g: 85, grassi_g: 50 }
+  ];
+  function isDemo(){ return !LS.get(KEY_K) && LS.get('nutrilens_demo') === '1'; }
+  function demoDelay(ms, signal){
+    return new Promise(function(res, rej){
+      var t = setTimeout(res, ms);
+      if (signal) signal.addEventListener('abort', function(){ clearTimeout(t); rej(err('cancelled')); });
+    });
+  }
+  async function demoRun(input, options, asJson){
+    options = options || {};
+    var last = Array.isArray(input) ? String(input[input.length - 1].content) : String(input);
+    await demoDelay(1400, options.signal);
+    if (asJson){
+      if (options.images && /Guarda la foto del piatto/.test(last)){
+        var i = 0; try{ i = Number(sessionStorage.getItem('nl_demo_i') || 0); sessionStorage.setItem('nl_demo_i', String(i + 1)); }catch(e){}
+        var d = JSON.parse(JSON.stringify(DEMO_DISHES[i % DEMO_DISHES.length])); d._demo = true; return d;
+      }
+      if (/Codice a barre/.test(last)) return { trovato: false };
+      if (/etichetta/.test(last)) return { leggibile: false };
+      return {};
+    }
+    var text = '🧪 **Modalità demo**\n\nQui l\'assistente risponde solo con questo messaggio di prova: per ricette, lista della spesa e registrazione dei pasti a voce serve la chiave AI.\n\nInseriscila da **Impostazioni › Nome e chiave AI** quando vuoi.';
+    if (options.onText) options.onText({ text: text, delta: text });
+    return { text: text, truncated: false, modelTierApplied: 'default' };
+  }
+
   async function run(input, options, asJson){
     options = options || {};
     var key = LS.get(KEY_K);
-    if (!key){ await NL.askKey("Per usare l'AI serve la tua chiave API Anthropic."); key = LS.get(KEY_K); }
-    if (!key) throw err('not_granted', 'Chiave API mancante');
+    if (!key && isDemo()) return demoRun(input, options, asJson);
+    if (!key){ await NL.askKey("Per usare l'AI serve una chiave: puoi crearne una gratis con Google (vedi sotto)."); key = LS.get(KEY_K); }
+    if (!key) throw err('not_granted', 'Chiave AI mancante');
     if (options.signal && options.signal.aborted) throw err('cancelled');
     var messages = typeof input === 'string' ? [{ role: 'user', content: input }]
       : (Array.isArray(input) ? input.map(function(m){ return { role: m.role, content: m.content }; }) : null);
@@ -230,7 +451,11 @@
       messages[messages.length - 1] = { role: 'user', content: blocks.concat([{ type: 'text', text: String(last.content) }]) };
     }
     var tools = (options.tools || []).slice(0, 8);
-    var apiTools = tools.map(function(t){ return { name: t.name, description: t.description, input_schema: t.inputSchema || { type: 'object', properties: {} } }; });
+    if (!isAnthropicKey(key)){
+      var g = await runGemini(messages, tools, options, asJson, key);
+      return finishRun(g.full, g.truncated, options, asJson);
+    }
+    var apiTools =tools.map(function(t){ return { name: t.name, description: t.description, input_schema: t.inputSchema || { type: 'object', properties: {} } }; });
     var model = MODELS[options.modelTier] || MODELS['default'];
     var full = '', rounds = 0, truncated = false, needSep = false;
     for (;;){
@@ -268,6 +493,9 @@
       truncated = round.stop === 'max_tokens';
       break;
     }
+    return finishRun(full, truncated, options, asJson);
+  }
+  function finishRun(full, truncated, options, asJson){
     if (!full.trim()) throw err('empty_completion', 'Risposta vuota');
     if (!asJson) return { text: full, truncated: truncated, modelTierApplied: options.modelTier || 'default' };
     var v = parseJsonLoose(full);
@@ -295,7 +523,22 @@
   /* ---------------- Finestra "Nome e chiave AI" ---------------- */
   var NL = window.NL = {
     keyDialogResolve: null,
-    maskedKey: function(){ var k = LS.get(KEY_K); return k ? 'chiave impostata (…' + k.slice(-4) + ')' : 'chiave non impostata'; },
+    maskedKey: function(){
+      var k = LS.get(KEY_K);
+      return k ? (isAnthropicKey(k) ? 'chiave Anthropic' : 'chiave Google gratuita') + ' (…' + k.slice(-4) + ')' : (LS.get('nutrilens_demo') === '1' ? 'modalità demo (AI simulata)' : 'chiave non impostata');
+    },
+    /* controlla subito se la chiave funziona (senza consumare quota) */
+    verifyKey: async function(key){
+      try{
+        var r = isAnthropicKey(key)
+          ? await fetch('https://api.anthropic.com/v1/models?limit=1', { headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' } })
+          : await fetch(G_BASE + 'models?pageSize=1', { headers: { 'x-goog-api-key': key } });
+        if (r.ok) return { ok: true };
+        var j = null; try{ j = await r.json(); }catch(e){}
+        var m = (j && j.error && j.error.message) || ('HTTP ' + r.status);
+        return { ok: false, bad: r.status === 400 || r.status === 401 || r.status === 403, msg: m };
+      }catch(e){ return { ok: false, bad: false, msg: 'rete' }; }
+    },
     refreshRow: function(){
       var sub = document.getElementById('nlAccountSub');
       if (sub) sub.textContent = (LS.get(NAME_K) || 'Senza nome') + ' · ' + NL.maskedKey();
@@ -307,9 +550,10 @@
       var ov = document.getElementById('nlAccountOverlay'); if (!ov) return;
       document.getElementById('nlAccName').value = LS.get(NAME_K);
       document.getElementById('nlAccKey').value = '';
-      document.getElementById('nlAccKey').placeholder = LS.get(KEY_K) ? 'Lascia vuoto per tenere la chiave attuale' : 'sk-ant-…';
-      document.getElementById('nlAccMsg').textContent = msg || 'Il nome compare nel saluto. La chiave serve all\'AI per riconoscere i piatti e resta solo su questo telefono.';
+      document.getElementById('nlAccKey').placeholder = LS.get(KEY_K) ? 'Lascia vuoto per tenere la chiave attuale' : 'Incolla qui la chiave (AIza… o sk-ant-…)';
+      document.getElementById('nlAccMsg').textContent = msg || 'Il nome compare nel saluto. La chiave serve all\'AI per riconoscere i piatti.';
       document.getElementById('nlAccRemove').style.display = LS.get(KEY_K) ? 'block' : 'none';
+      document.getElementById('nlAccDemo').style.display = LS.get(KEY_K) ? 'none' : 'block';
       ov.classList.add('show');
     },
     closeDialog: function(saved){
@@ -328,18 +572,34 @@
       '<div class="login-sheet-title">Nome e chiave AI</div>' +
       '<div class="login-sheet-sub" id="nlAccMsg"></div>' +
       '<div class="sheet-field"><label>Il tuo nome</label><div class="sheet-input-row"><input type="text" id="nlAccName" placeholder="Nome" autocomplete="given-name"></div></div>' +
-      '<div class="sheet-field"><label>Chiave API Anthropic</label><div class="sheet-input-row"><input type="password" id="nlAccKey" autocomplete="off" autocapitalize="off" spellcheck="false"></div></div>' +
-      '<div class="nl-help">La crei su console.anthropic.com › Settings › API keys. Ti consiglio di impostare un limite di spesa mensile (per esempio 5 €): ogni foto analizzata costa pochi centesimi.</div>' +
+      '<div class="sheet-field"><label>Chiave AI</label><div class="sheet-input-row"><input type="text" id="nlAccKey" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></div></div>' +
+      '<div class="nl-help"><b>Gratis (Google):</b> apri <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>, accedi con il tuo account Google, tocca «Create API key», copia la chiave (inizia con <b>AIza</b>) e incollala qui. Con il piano gratuito Google può usare le foto per migliorare i suoi prodotti.<br><b>A pagamento (Anthropic):</b> chiave che inizia con <b>sk-ant-</b>, da console.anthropic.com. Resta solo su questo telefono.</div>' +
       '<button class="btn btn-primary" id="nlAccSave" style="width:100%">Salva</button>' +
+      '<button class="nl-link-btn" id="nlAccDemo" style="color:var(--accent)">Usa la demo senza chiave (AI simulata)</button>' +
       '<button class="nl-link-btn" id="nlAccRemove">Rimuovi la chiave da questo telefono</button></div>';
     document.body.appendChild(ov);
     ov.addEventListener('click', function(e){ if (e.target === ov) NL.closeDialog(false); });
-    document.getElementById('nlAccSave').addEventListener('click', function(){
-      var n = document.getElementById('nlAccName').value.trim(), k = document.getElementById('nlAccKey').value.trim();
+    document.getElementById('nlAccSave').addEventListener('click', async function(){
+      var btn = this, msgEl = document.getElementById('nlAccMsg');
+      var n = document.getElementById('nlAccName').value.trim(), k = document.getElementById('nlAccKey').value.replace(/\s+/g, '');
       if (n) LS.set(NAME_K, n.slice(0, 40));
-      if (k) LS.set(KEY_K, k);
+      if (k){
+        btn.disabled = true; btn.textContent = 'Controllo la chiave…';
+        var v = await NL.verifyKey(k);
+        btn.disabled = false; btn.textContent = 'Salva';
+        if (!v.ok && v.bad){
+          msgEl.textContent = 'Questa chiave non risulta valida. Controlla di averla copiata tutta: quella gratuita di Google inizia con AIza, quella Anthropic con sk-ant-.';
+          return;
+        }
+        LS.set(KEY_K, k); LS.del('nutrilens_demo');
+      }
       NL.refreshRow(); try{ window.updateGreeting && window.updateGreeting(); }catch(e){}
       NL.closeDialog(!!LS.get(KEY_K));
+    });
+    document.getElementById('nlAccDemo').addEventListener('click', function(){
+      var n = document.getElementById('nlAccName').value.trim(); if (n) LS.set(NAME_K, n.slice(0, 40));
+      LS.set('nutrilens_demo', '1'); NL.refreshRow(); try{ window.updateGreeting && window.updateGreeting(); }catch(e){}
+      NL.closeDialog(true);
     });
     document.getElementById('nlAccRemove').addEventListener('click', function(){
       LS.del(KEY_K); NL.refreshRow(); NL.closeDialog(false);
@@ -1117,9 +1377,11 @@ button.btn{font-family:inherit;font-size:.92rem;font-weight:700;border:none;bord
     <div class="login-sheet-title">Benvenuto in NutriLens</div>
     <div class="login-sheet-sub">Due cose e iniziamo</div>
     <div class="sheet-field"><label>Come ti chiami?</label><div class="sheet-input-row"><input type="text" id="setupName" placeholder="Il tuo nome" autocomplete="given-name"></div></div>
-    <div class="sheet-field"><label>Chiave API Anthropic (serve all'AI)</label><div class="sheet-input-row"><input type="password" id="setupKey" placeholder="sk-ant-…" autocomplete="off" autocapitalize="off" spellcheck="false"></div></div>
-    <div class="nl-help">La crei su console.anthropic.com › Settings › API keys e resta solo su questo telefono. Puoi anche inserirla dopo, dalle impostazioni. Ti consiglio un limite di spesa mensile (per esempio 5 €): ogni foto analizzata costa pochi centesimi.</div>
+    <div class="sheet-field"><label>Chiave AI (serve a riconoscere i piatti)</label><div class="sheet-input-row"><input type="text" id="setupKey" placeholder="Incolla qui la chiave (AIza… o sk-ant-…)" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></div></div>
+    <div class="nl-help"><b>Gratis (Google):</b> apri <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>, accedi con Google, tocca «Create API key», copia la chiave (inizia con <b>AIza</b>) e incollala qui. Con il piano gratuito Google può usare le foto per migliorare i suoi prodotti.<br><b>A pagamento (Anthropic):</b> chiave che inizia con <b>sk-ant-</b>. La chiave resta solo su questo telefono e puoi metterla anche dopo, da Impostazioni.</div>
+    <div class="nl-help" id="setupMsg" style="display:none;color:#FF453A;font-weight:600"></div>
     <button class="btn btn-primary" id="setupGo" style="width:100%">Inizia</button>
+    <button class="btn btn-secondary" id="setupDemo" style="width:100%; margin-top:10px">Prima provo la demo, senza chiave</button>
   </div>
 </div>
 
@@ -2024,9 +2286,24 @@ function proceedFromPermissions(){
     if (tabBarEl) tabBarEl.style.display = 'none';
     setTimeout(() => { loginSheetOverlay.classList.add('show'); }, 1400);
   }
-  document.getElementById('setupGo').addEventListener('click', () => {
-    const n = document.getElementById('setupName').value.trim(), k = document.getElementById('setupKey').value.trim();
-    try{ if (n) localStorage.setItem('nutrilens_name', n.slice(0, 40)); if (k) localStorage.setItem('nutrilens_apikey', k); }catch(e){}
+  document.getElementById('setupGo').addEventListener('click', async () => {
+    const btn = document.getElementById('setupGo'), msg = document.getElementById('setupMsg');
+    const n = document.getElementById('setupName').value.trim(), k = document.getElementById('setupKey').value.replace(/\s+/g, '');
+    msg.style.display = 'none';
+    if (k && window.NL){
+      btn.disabled = true; btn.textContent = 'Controllo la chiave…';
+      const v = await NL.verifyKey(k);
+      btn.disabled = false; btn.textContent = 'Inizia';
+      if (!v.ok && v.bad){ msg.textContent = 'Questa chiave non risulta valida: controlla di averla copiata tutta (quella gratuita di Google inizia con AIza). Oppure lascia il campo vuoto e provala dopo.'; msg.style.display = 'block'; return; }
+    }
+    try{ if (n) localStorage.setItem('nutrilens_name', n.slice(0, 40)); if (k){ localStorage.setItem('nutrilens_apikey', k); localStorage.removeItem('nutrilens_demo'); } }catch(e){}
+    try{ updateGreeting(); }catch(e){}
+    if (window.NL) NL.refreshRow();
+    afterAuth();
+  });
+  document.getElementById('setupDemo').addEventListener('click', () => {
+    const n = document.getElementById('setupName').value.trim();
+    try{ if (n) localStorage.setItem('nutrilens_name', n.slice(0, 40)); localStorage.setItem('nutrilens_demo', '1'); }catch(e){}
     try{ updateGreeting(); }catch(e){}
     if (window.NL) NL.refreshRow();
     afterAuth();
@@ -3697,16 +3974,16 @@ Rispondi SOLO con un oggetto JSON valido, senza testo prima o dopo:
     currentResult = res; barcodeProduct = null; barcodeQtyField.style.display = 'none'; renderResult(res);
     if (res._ingredienti){ currentIngredients = res._ingredienti.map(x => x.slice(0, 40)); renderIngredients(); }
     else if (names.length){ currentIngredients = names.map(x => x.slice(0, 40)); renderIngredients(); }
-    document.getElementById('resultLabel').textContent = "Stima dell'AI per l'intero piatto" + (res.porzione ? ' · circa ' + String(res.porzione).replace(/^circa\s*/i,'') : '') + (res._fromDb ? ' · valori dal database alimenti' : '') + ' · tocca per modificare';
+    document.getElementById('resultLabel').textContent = "Stima dell'AI per l'intero piatto" + (res.porzione ? ' · circa ' + String(res.porzione).replace(/^circa\s*/i,'') : '') + (res._fromDb ? ' · valori dal database alimenti' : '') + (res._demo ? ' · DEMO: piatto simulato, non letto dalla foto' : '') + ' · tocca per modificare';
   }catch(err){
     console.error(err);
     const code = err && (err.code || err.name || err.message) ? String(err.code || err.name || err.message).slice(0, 60) : 'errore';
-    if (err && err.code==='not_granted') showError('Permesso AI non concesso: tocca di nuovo e consenti l\'accesso.');
-    else if (err && err.code==='rate_limited') showError('Troppe richieste, riprova tra poco.');
+    if (err && err.code==='not_granted') showError(window.NL_STANDALONE ? 'Chiave AI mancante o non valida. Vai in Impostazioni › Nome e chiave AI e incolla la chiave (gratis con Google), oppure usa la demo.' : 'Permesso AI non concesso: tocca di nuovo e consenti l\'accesso.');
+    else if (err && err.code==='rate_limited') showError(window.NL_STANDALONE ? 'Limite di richieste dell\'AI raggiunto (piano gratuito): aspetta un minuto e riprova.' : 'Troppe richieste, riprova tra poco.');
     else if (err && err.code==='images_unavailable') showError('Questa vista non supporta l\'analisi di immagini.');
     else if (err && err.code==='image_rejected') showError('Foto non valida, riprova con un\'altra immagine.');
     else if (err && err.code==='invalid_json') showError('Non ho capito la risposta dell\'AI. Riprova.');
-    else showError('Analisi non riuscita (' + code + '). Riprova.');
+    else showError('Analisi non riuscita (' + code + (window.NL_STANDALONE && err && err.message && err.message !== err.code ? ': ' + String(err.message).slice(0, 160) : '') + '). Riprova.');
   }finally{ scanOverlay.style.display = 'none'; setScanFound(false); }
 }
 function renderResult(r){
@@ -4054,11 +4331,11 @@ async function aiSend(text){
     if (e && e.text){ bubble.classList.remove('thinking'); bubble.innerHTML = renderMd(e.text); aiTurns.push({role:'assistant', content:e.text}); saveAiTurns(); }
     else bubble.remove();
     if (code === 'cancelled') {}
-    else if (code === 'not_granted' || code === 'sampling_disabled') aiNote('Permesso AI non concesso per questa app.', true);
-    else if (code === 'rate_limited') aiNote('Troppe richieste, riprova tra poco.', true);
+    else if (code === 'not_granted' || code === 'sampling_disabled') aiNote(window.NL_STANDALONE ? 'Chiave AI mancante o non valida: vai in Impostazioni › Nome e chiave AI.' : 'Permesso AI non concesso per questa app.', true);
+    else if (code === 'rate_limited') aiNote(window.NL_STANDALONE ? 'Limite di richieste dell\'AI raggiunto (piano gratuito): aspetta un minuto e riprova.' : 'Troppe richieste, riprova tra poco.', true);
     else if (code === 'session_expired') aiNote('Sessione scaduta: accedi di nuovo.', true);
     else if (code === 'refused') aiNote('Non posso aiutarti con questa richiesta.', true);
-    else aiNote('Qualcosa è andato storto. Riprova.', true);
+    else aiNote('Qualcosa è andato storto' + (window.NL_STANDALONE && e && e.message ? ' (' + String(e.message).slice(0, 140) + ')' : '') + '. Riprova.', true);
   }finally{
     setAiBusy(false); aiCtl = null; scrollChatEnd();
   }
