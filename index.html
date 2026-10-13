@@ -1621,6 +1621,20 @@ button.btn{font-family:inherit;font-size:.92rem;font-weight:700;border:none;bord
 :root[data-glass="solid"][data-theme="light"] .tabdock{--lg-bg:#ffffff; --lg-sel:rgba(120,120,128,.16); --lg-edge:rgba(0,0,0,.08)}
 :root[data-glass="solid"] .tabbar{box-shadow:inset 0 0 0 .5px var(--lg-edge), 0 6px 18px rgba(0,0,0,.28)}
 :root[data-glass="solid"] .tabdock::before{opacity:1}
+
+.capture-sheet .res-kcal{padding:16px 18px 16px 22px; gap:10px}
+.capture-sheet .res-kcal .sheet-input-row{align-items:baseline; gap:6px}
+.capture-sheet .res-kcal input{font-size:2.6rem; line-height:1.1; padding:0; height:auto; min-width:1.2ch; letter-spacing:-.03em}
+.capture-sheet .res-kcal .cal-unit-label{align-self:baseline; padding:0; margin-left:-3px; font-size:.95rem; font-weight:700}
+.capture-sheet .res-kcal .rk-sub{margin-top:6px}
+.capture-sheet .rk-ring{width:86px; height:86px}
+
+.wt-hist.open{max-height:340px; overflow-y:auto; -webkit-overflow-scrolling:touch}
+.wt-more{margin-top:6px; align-self:center; border:none; background:none; color:var(--accent); font-family:inherit; font-weight:700; font-size:.82rem; padding:8px 12px; cursor:pointer}
+
+#wtSheetList{max-height:62vh; overflow-y:auto; -webkit-overflow-scrolling:touch; padding-bottom:8px}
+
+.capture-sheet.has-photo #resultLabel{display:none !important}
 </style>
 </head>
 <body>
@@ -1815,6 +1829,17 @@ button.btn{font-family:inherit;font-size:.92rem;font-weight:700;border:none;bord
         <button class="sheet-close" id="macroDetailClose">✕</button>
       </div>
       <div id="macroDetailList"></div>
+    </div>
+  </div>
+
+  <div class="sheet-overlay" id="wtSheetOverlay">
+    <div class="sheet glass" id="wtSheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <div class="sheet-name">Storico del peso</div>
+        <button class="sheet-close" id="wtSheetClose">✕</button>
+      </div>
+      <div class="wt-hist" id="wtSheetList"></div>
     </div>
   </div>
 
@@ -4160,14 +4185,14 @@ async function onBarcodeFound(code){
   let found = null;
   try{
     const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 6000);
-    const r = await fetch('https://world.openfoodfacts.org/api/v2/product/' + encodeURIComponent(code) + '.json?fields=product_name,product_name_it,brands,nutriments,image_front_small_url', {signal: ctl.signal});
+    const r = await fetch('https://world.openfoodfacts.org/api/v2/product/' + encodeURIComponent(code) + '.json?fields=product_name,product_name_it,brands,nutriments,image_front_url,image_front_small_url', {signal: ctl.signal});
     clearTimeout(to);
     const j = await r.json();
     const prod = j && j.status === 1 && j.product, n = prod && prod.nutriments;
     const kcal = n ? (n['energy-kcal_100g'] != null ? Number(n['energy-kcal_100g']) : (n['energy_100g'] != null ? Number(n['energy_100g']) / 4.184 : NaN)) : NaN;
     if (prod && isFinite(kcal)){
       const nm = (prod.product_name_it || prod.product_name || 'Prodotto').trim();
-      found = { name: prod.brands ? nm + ' · ' + String(prod.brands).split(',')[0].trim() : nm, per100: { kcal, p: Number(n.proteins_100g) || 0, c: Number(n.carbohydrates_100g) || 0, g: Number(n.fat_100g) || 0 }, photo: prod.image_front_small_url || null, source: 'db' };
+      found = { name: prod.brands ? nm + ' · ' + String(prod.brands).split(',')[0].trim() : nm, per100: { kcal, p: Number(n.proteins_100g) || 0, c: Number(n.carbohydrates_100g) || 0, g: Number(n.fat_100g) || 0 }, photo: prod.image_front_url || prod.image_front_small_url || null, source: 'db' };
     }
   }catch(e){ console.error(e); }
   // 2) se la rete è bloccata o il prodotto manca: chiedo all'AI (solo se è davvero sicura)
@@ -4182,9 +4207,38 @@ async function onBarcodeFound(code){
   }
   applyFoundProduct(found, code);
 }
+/* foto del prodotto nel riepilogo: la scarico e la riduco, così resta salvata anche offline */
+async function showProductPhoto(url){
+  if (!url) return;
+  let src = url;
+  try{
+    const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 6000);
+    const r = await fetch(url, {signal: ctl.signal}); clearTimeout(to);
+    const blob = await r.blob();
+    const du = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(blob); });
+    const th = await makeThumbnail(du, 440); if (th) src = th;
+  }catch(e){ /* niente CORS o rete: si usa direttamente l'indirizzo dell'immagine */ }
+  if (!barcodeProduct) return;
+  barcodePhotoUrl = src;
+  preview.src = src; preview.style.display = 'block'; captureHint.style.display = 'none';
+  captureArea.style.display = ''; captureArea.classList.remove('live');
+  captureCard.classList.add('has-photo'); captureCard.classList.remove('no-retake');
+  captureCard.scrollTop = 0;
+}
+async function findPhotoByName(name){
+  try{
+    const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 6000);
+    const r = await fetch('https://world.openfoodfacts.org/cgi/search.pl?search_simple=1&action=process&json=1&page_size=1&fields=image_front_url,image_front_small_url&search_terms=' + encodeURIComponent(name), {signal: ctl.signal});
+    clearTimeout(to);
+    const j = await r.json(), pr = j && j.products && j.products[0];
+    return (pr && (pr.image_front_url || pr.image_front_small_url)) || null;
+  }catch(e){ return null; }
+}
 function applyFoundProduct(f, code){
   barcodeProduct = { code, per100: f.per100 };
   barcodePhotoUrl = f.photo || null;
+  if (f.photo) showProductPhoto(f.photo);
+  else if (f.name && f.source !== 'label'){ const nm = String(f.name); findPhotoByName(nm.split('·')[0].trim() + (nm.includes('·') ? ' ' + nm.split('·')[1].trim() : '')).then(u => { if (u && barcodeProduct && barcodeProduct.code === code) showProductPhoto(u); }); }
   document.getElementById('resultName').value = String(f.name || 'Prodotto').slice(0, 60);
   barcodeQty.value = 100;
   barcodeQtyField.style.display = 'block';
@@ -4389,6 +4443,7 @@ requestAnimationFrame(() => { updateTabPill(); setTimeout(updateTabPill, 50); se
   const get = () => { try{ return JSON.parse(localStorage.getItem(KEY) || '[]'); }catch(e){ return []; } };
   const put = a => { try{ localStorage.setItem(KEY, JSON.stringify(a)); }catch(e){} };
   const fmt = n => (Math.round(n * 10) / 10).toString().replace('.', ',');
+  let wtOpen = false;
   window.renderWeight = function(){
     let a = get().sort((x, y) => x.ts - y.ts);
     const cur = document.getElementById('wtCurrent'), dl = document.getElementById('wtDelta'), svg = document.getElementById('wtChart'), hist = document.getElementById('wtHist');
@@ -4415,7 +4470,13 @@ requestAnimationFrame(() => { updateTabPill(); setTimeout(updateTabPill, 50); se
       svg.innerHTML = gl + '<path d="' + line + ' L' + xy[xy.length - 1][0] + ' 90 L' + xy[0][0] + ' 90 Z" fill="var(--accent)" opacity=".14"/><path d="' + line + '" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>' + xy.map(q => '<circle cx="' + q[0] + '" cy="' + q[1] + '" r="2.6" fill="var(--accent)" vector-effect="non-scaling-stroke"/>').join('');
       svg.classList.add('show');
     } else svg.classList.remove('show');
-    hist.innerHTML = a.filter(x => !x.seed).slice(-5).reverse().map(x => '<div class="wt-row"><span>' + new Date(x.ts).toLocaleDateString('it-IT', {day:'numeric', month:'short', year:'numeric'}) + '</span><span><b>' + fmt(x.kg) + ' kg</b><button data-ts="' + x.ts + '" aria-label="Elimina">✕</button></span></div>').join('');
+    const all = a.filter(x => !x.seed).slice().reverse(), LIM = 2, MAXINLINE = 6, big = all.length > MAXINLINE;
+    const row = x => '<div class="wt-row"><span>' + new Date(x.ts).toLocaleDateString('it-IT', {day:'numeric', month:'short', year:'numeric'}) + '</span><span><b>' + fmt(x.kg) + ' kg</b><button data-ts="' + x.ts + '" aria-label="Elimina">✕</button></span></div>';
+    const shown = (wtOpen && !big) ? all : all.slice(0, LIM);
+    hist.innerHTML = shown.map(row).join('') +
+      (all.length > LIM ? '<button class="wt-more" id="wtMore" type="button">' + ((wtOpen && !big) ? 'Mostra meno' : 'Mostra tutto (' + all.length + ')') + '</button>' : '');
+    const sl = document.getElementById('wtSheetList'); if (sl) sl.innerHTML = all.map(row).join('');
+    if (!big && document.getElementById('wtSheetOverlay').classList.contains('show')) document.getElementById('wtSheetOverlay').classList.remove('show');
   };
   document.getElementById('wtSave').addEventListener('click', () => {
     const inp = document.getElementById('wtInput'), v = parseFloat(String(inp.value).replace(',', '.'));
@@ -4426,7 +4487,15 @@ requestAnimationFrame(() => { updateTabPill(); setTimeout(updateTabPill, 50); se
   const saveGoal = () => { const v = parseFloat(String(gIn.value).replace(',', '.')); try{ if (v >= 20 && v <= 400) localStorage.setItem('nutrilens_wgoal', String(Math.round(v * 10) / 10)); else if (!gIn.value) localStorage.removeItem('nutrilens_wgoal'); }catch(e){} renderWeight(); };
   gIn.addEventListener('change', saveGoal); gIn.addEventListener('keydown', e => { if (e.key === 'Enter') gIn.blur(); });
   document.getElementById('wtInput').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('wtSave').click(); });
+  document.getElementById('wtSheetClose').addEventListener('click', () => document.getElementById('wtSheetOverlay').classList.remove('show'));
+  document.getElementById('wtSheetOverlay').addEventListener('click', (e) => { if (e.target.id === 'wtSheetOverlay') e.target.classList.remove('show'); });
+  document.getElementById('wtSheetList').addEventListener('click', (e) => { const b = e.target.closest('button[data-ts]'); if (!b) return; put(get().filter(x => String(x.ts) !== b.dataset.ts)); renderWeight(); });
   document.getElementById('wtHist').addEventListener('click', e => {
+    if (e.target.closest('#wtMore')){
+      const n = get().length;
+      if (n > 6){ document.getElementById('wtSheetOverlay').classList.add('show'); return; }
+      wtOpen = !wtOpen; renderWeight(); return;
+    }
     const b = e.target.closest('button[data-ts]'); if (!b) return;
     put(get().filter(x => String(x.ts) !== b.dataset.ts)); renderWeight();
   });
@@ -4715,7 +4784,7 @@ document.getElementById('captureRetake').addEventListener('click', () => retakeB
     const cs = getComputedStyle(kIn);
     fitSpan.style.font = cs.font; fitSpan.style.letterSpacing = cs.letterSpacing;
     fitSpan.textContent = kIn.value || '0';
-    kIn.style.width = (Math.ceil(fitSpan.getBoundingClientRect().width) + 14) + 'px';
+    kIn.style.width = (Math.ceil(fitSpan.getBoundingClientRect().width) + 4) + 'px';
     kIn.style.minWidth = '2ch'; kIn.style.maxWidth = '100%';
   }
   setInterval(() => { draw(); fit(); }, 250);
