@@ -379,8 +379,10 @@
     var tier = options.modelTier || 'default';
     var full = '', rounds = 0, truncated = false, needSep = false;
     for (;;){
+      var hasImg = !!(options.images && options.images.length);
       var body = { contents: contents, generationConfig: { maxOutputTokens: 8192 } };
-      if (!gNoThink) body.generationConfig.thinkingConfig = { thinkingLevel: 'low' };
+      if (asJson && hasImg) body.generationConfig.temperature = 0.2;
+      if (!gNoThink) body.generationConfig.thinkingConfig = { thinkingLevel: hasImg ? 'medium' : 'low' };
       if (decls.length) body.tools = [{ functionDeclarations: decls }];
       else if (asJson) body.generationConfig.responseMimeType = 'application/json';
       var round = await geminiRound(tier, body, key, options.signal, function(delta){
@@ -1142,13 +1144,13 @@ button.btn{font-family:inherit;font-size:.92rem;font-weight:700;border:none;bord
 .tabdock{
   position:fixed; left:20px; right:20px; bottom:calc(10px + env(safe-area-inset-bottom,0px));
   max-width:440px; margin:0 auto; z-index:40; display:flex; align-items:center; gap:10px;
-  --lg-bg:rgba(60,60,64,.34); --lg-edge:rgba(255,255,255,.28); --lg-sel:rgba(255,255,255,.17); --lg-ink:#f2f2f7; --lg-off:rgba(235,235,245,.78);
+  --lg-bg:rgba(34,34,38,.72); --lg-edge:rgba(255,255,255,.28); --lg-sel:rgba(255,255,255,.17); --lg-ink:#f2f2f7; --lg-off:rgba(235,235,245,.78);
 }
-:root[data-theme="light"] .tabdock{--lg-bg:rgba(255,255,255,.42); --lg-edge:rgba(255,255,255,.9); --lg-sel:rgba(120,120,128,.16); --lg-ink:#1c1c1e; --lg-off:rgba(60,60,67,.78)}
+:root[data-theme="light"] .tabdock{--lg-bg:rgba(255,255,255,.74); --lg-edge:rgba(255,255,255,.9); --lg-sel:rgba(120,120,128,.16); --lg-ink:#1c1c1e; --lg-off:rgba(60,60,67,.78)}
 .tabbar,.tab-add{
   position:relative; isolation:isolate; border-radius:999px; height:62px;
   background:var(--lg-bg);
-  backdrop-filter:blur(18px) saturate(2.2) brightness(1.08); -webkit-backdrop-filter:blur(18px) saturate(2.2) brightness(1.08);
+  backdrop-filter:blur(var(--lg-blur,28px)) saturate(2); -webkit-backdrop-filter:blur(var(--lg-blur,28px)) saturate(2);
   box-shadow:
     inset 0 0 0 .5px var(--lg-edge),
     inset 1.5px 1.5px 1px -.5px rgba(255,255,255,.55),
@@ -1596,6 +1598,29 @@ button.btn{font-family:inherit;font-size:.92rem;font-weight:700;border:none;bord
 #pcSheetBody .pc-big{font-size:2.2rem}
 #pcSheetBody .pcs-week{padding:22px 4px 10px; margin-top:6px}
 #pcSheetBody .bar-col{pointer-events:auto}
+
+.capture-sheet .save-bar{position:fixed; left:0; right:0; bottom:0; margin:0; padding:26px 18px calc(12px + env(safe-area-inset-bottom,0px)); z-index:6}
+.capture-sheet .result{padding-bottom:120px}
+
+.cam-zoom{position:absolute; left:50%; transform:translateX(-50%); bottom:calc(env(safe-area-inset-bottom,0px) + 152px); z-index:3; display:flex; gap:6px; padding:5px; border-radius:999px; background:rgba(20,20,22,.45); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px)}
+.cam-zoom button{min-width:40px; height:36px; border-radius:999px; border:none; background:transparent; color:#fff; font-family:inherit; font-weight:700; font-size:.82rem; cursor:pointer; padding:0 8px}
+.cam-zoom button.on{background:rgba(255,255,255,.22); color:#FFD60A}
+.cam-screen.barcode .cam-zoom, .cam-screen.fallback .cam-zoom{display:none}
+#camVideo{transform-origin:center center; transition:transform .25s ease}
+
+.tabdock::before{content:''; position:absolute; left:-20px; right:-20px; bottom:calc(-10px - env(safe-area-inset-bottom,0px)); height:calc(100% + 56px + env(safe-area-inset-bottom,0px)); background:linear-gradient(to bottom, transparent, var(--bg1) 62%); pointer-events:none; z-index:-1}
+
+/* Vetro della tab bar: più vetro / auto / più solido */
+:root[data-glass="clear"] .tabdock{--lg-bg:rgba(255,255,255,.07); --lg-blur:8px; --lg-sel:rgba(255,255,255,.22); --lg-edge:rgba(255,255,255,.4)}
+:root[data-glass="clear"][data-theme="light"] .tabdock{--lg-bg:rgba(255,255,255,.16); --lg-sel:rgba(255,255,255,.55)}
+:root[data-glass="clear"] .tabdock::before{display:none}
+:root[data-glass="clear"] .tabbar{box-shadow:inset 0 0 0 .5px var(--lg-edge), inset 2px 2px 2px -1px rgba(255,255,255,.7), inset -2px -2px 2px -1px rgba(255,255,255,.35), 0 10px 34px rgba(0,0,0,.22)}
+:root[data-glass="clear"] .tab-item:not(.active){color:#fff; text-shadow:0 1px 4px rgba(0,0,0,.55)}
+:root[data-glass="clear"][data-theme="light"] .tab-item:not(.active){color:#1c1c1e; text-shadow:0 1px 3px rgba(255,255,255,.7)}
+:root[data-glass="solid"] .tabdock{--lg-bg:#1c1c1f; --lg-blur:0px; --lg-sel:rgba(120,120,128,.3); --lg-edge:rgba(255,255,255,.1)}
+:root[data-glass="solid"][data-theme="light"] .tabdock{--lg-bg:#ffffff; --lg-sel:rgba(120,120,128,.16); --lg-edge:rgba(0,0,0,.08)}
+:root[data-glass="solid"] .tabbar{box-shadow:inset 0 0 0 .5px var(--lg-edge), 0 6px 18px rgba(0,0,0,.28)}
+:root[data-glass="solid"] .tabdock::before{opacity:1}
 </style>
 </head>
 <body>
@@ -1963,6 +1988,14 @@ button.btn{font-family:inherit;font-size:.92rem;font-weight:700;border:none;bord
               <button data-v="system">Sistema</button>
             </div>
           </div>
+          <div class="settings-row settings-row-theme">
+            <div class="settings-row-label">Vetro tab bar</div>
+            <div class="seg" id="glassSeg">
+              <button data-v="clear">Più vetro</button>
+              <button data-v="auto">Auto</button>
+              <button data-v="solid">Più solido</button>
+            </div>
+          </div>
           <div class="settings-row" id="accentRow">
             <div class="settings-row-text"><div class="settings-row-label">Colori</div></div>
             <span class="settings-row-value" id="accentRowValue">Blu</span>
@@ -2299,6 +2332,7 @@ button.btn{font-family:inherit;font-size:.92rem;font-weight:700;border:none;bord
       <input type="text" id="camCodeInput" inputmode="numeric" placeholder="Codice a barre (EAN)" maxlength="14" autocomplete="off">
       <button id="camCodeGo">Cerca</button>
     </div>
+    <div class="cam-zoom" id="camZoom"><button data-z="0.5" id="camZ05" style="display:none">0,5</button><button data-z="1" class="on">1×</button><button data-z="2">2</button></div>
     <div class="cam-bar">
       <button class="cam-side" id="camGallery" aria-label="Galleria">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="9" cy="9" r="1.8"/><path d="M21 15l-5-5L5 21"/></svg>
@@ -2353,6 +2387,10 @@ button.btn{font-family:inherit;font-size:.92rem;font-weight:700;border:none;bord
         <label>Quantità consumata</label>
         <div class="sheet-input-row"><input type="number" id="barcodeQty" min="1" step="1" inputmode="decimal"><span>g</span></div>
       </div>
+      <div class="sheet-field" id="totalGramsField" style="display:none">
+        <label for="manualGrams">Grammi totali del piatto</label>
+        <div class="sheet-input-row"><input type="number" id="manualGrams" min="0" step="1" inputmode="decimal" placeholder="es. 350"><span>g</span></div>
+      </div>
       <div class="res-kcal">
         <div class="rk-left">
           <label for="resultKcal">Calorie totali</label>
@@ -2360,10 +2398,6 @@ button.btn{font-family:inherit;font-size:.92rem;font-weight:700;border:none;bord
           <div class="rk-sub" id="rkSub">Tocca i numeri per modificarli</div>
         </div>
         <svg class="rk-ring" id="macroRing" viewBox="0 0 120 120" aria-hidden="true"></svg>
-      </div>
-      <div class="sheet-field" id="totalGramsField" style="display:none">
-        <label for="manualGrams">Grammi totali del piatto</label>
-        <div class="sheet-input-row"><input type="number" id="manualGrams" min="0" step="1" inputmode="decimal" placeholder="es. 350"><span>g</span></div>
       </div>
       <div class="macro-grid">
         <div class="macro-card mc-carbs">
@@ -2626,21 +2660,32 @@ function proceedFromPermissions(){
     if (row) row.classList.add('granted');
     updatePermissionsContinueState();
   }
+  function permMsg(t){ permHint.textContent = t; permHint.style.visibility = 'visible'; }
   document.getElementById('permRow_camera').addEventListener('click', async () => {
     if (permGranted.camera) return;
-    grantPermissionRow('camera');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ permMsg('La fotocamera non è disponibile su questo browser'); return; }
     try{
-      const stream = await navigator.mediaDevices.getUserMedia({video:true});
+      const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
       stream.getTracks().forEach(t => t.stop());
-    }catch(e){ /* permesso negato o fotocamera non disponibile: la riga resta comunque confermata */ }
+      grantPermissionRow('camera');
+    }catch(e){
+      permMsg(e && e.name === 'NotAllowedError' ? 'Fotocamera non consentita. Riprova e tocca «Consenti», oppure abilitala da Impostazioni › Safari › Fotocamera' : 'Fotocamera non disponibile');
+    }
   });
   document.getElementById('permRow_photos').addEventListener('click', () => {
     if (permGranted.photos) return;
-    grantPermissionRow('photos');
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true; inp.style.display = 'none';
+    let done = false; const fin = () => { if (done) return; done = true; grantPermissionRow('photos'); inp.remove(); };
+    inp.addEventListener('change', fin); inp.addEventListener('cancel', fin);
+    document.body.appendChild(inp); inp.click();
   });
   document.getElementById('permRow_health').addEventListener('click', () => {
     if (permGranted.health) return;
-    grantPermissionRow('health');
+    let left = false;
+    const back = () => { if (document.visibilityState === 'hidden'){ left = true; } else if (left){ document.removeEventListener('visibilitychange', back); grantPermissionRow('health'); } };
+    document.addEventListener('visibilitychange', back);
+    setTimeout(() => { if (!left){ document.removeEventListener('visibilitychange', back); grantPermissionRow('health'); permMsg('Salute: apri l\'app Salute › Condivisione › App e servizi per gestire i permessi'); } }, 1800);
+    try{ window.location.href = 'x-apple-health://'; }catch(e){}
   });
   document.getElementById('permissionsContinueBtn').addEventListener('click', () => {
     if (permContinueBtn.disabled) return;
@@ -2796,6 +2841,26 @@ applyTheme(THEME_MODE);
 document.getElementById('themeSeg').addEventListener('click', (e) => {
   const btn = e.target.closest('button'); if (!btn) return;
   applyTheme(btn.dataset.v);
+});
+
+/* ---- Vetro della tab bar ---- */
+let GLASS_MODE = localStorage.getItem('nutrilens_glass') || 'auto';
+function resolveGlass(mode){
+  if (mode !== 'auto') return mode;
+  try{ if (window.matchMedia('(prefers-reduced-transparency: reduce)').matches || window.matchMedia('(prefers-contrast: more)').matches) return 'solid'; }catch(e){}
+  return 'mid';
+}
+function applyGlass(mode){
+  GLASS_MODE = mode;
+  try{ localStorage.setItem('nutrilens_glass', mode); }catch(e){}
+  document.documentElement.setAttribute('data-glass', resolveGlass(mode));
+  document.querySelectorAll('#glassSeg button').forEach(b => b.classList.toggle('active', b.dataset.v === mode));
+}
+try{ ['(prefers-reduced-transparency: reduce)', '(prefers-contrast: more)'].forEach(q => window.matchMedia(q).addEventListener('change', () => { if (GLASS_MODE === 'auto') applyGlass('auto'); })); }catch(e){}
+applyGlass(GLASS_MODE);
+document.getElementById('glassSeg').addEventListener('click', (e) => {
+  const btn = e.target.closest('button'); if (!btn) return;
+  applyGlass(btn.dataset.v);
 });
 
 /* ---- Unità di misura (finestra dedicata) ---- */
@@ -3395,7 +3460,7 @@ function openEditMeal(m){
   document.getElementById('resultCarbs').value = Math.round(m.carboidrati_g || 0);
   document.getElementById('resultProtein').value = Math.round(m.proteine_g || 0);
   document.getElementById('resultFat').value = Math.round(m.grassi_g || 0);
-  document.getElementById('manualGrams').value = m.grammi_tot || '';
+  document.getElementById('manualGrams').value = m.grammi_tot || ''; if (m.grammi_tot) document.getElementById('manualGrams').dataset.touched = '1'; else delete document.getElementById('manualGrams').dataset.touched;
   currentIngredients = Array.isArray(m.ingr) ? m.ingr.map(x => Object.assign({}, x)) : (Array.isArray(m.ingredienti) ? m.ingredienti.map(parseIngString) : []);
   renderIngredients(); showError(''); showManualError('');
   saveBtn.textContent = 'Salva modifiche';
@@ -3555,14 +3620,19 @@ function renderIngredients(){
 function updateTotalG(){
   const el = document.getElementById('rkSub'); if (!el) return;
   let g = currentIngredients.reduce((a, x) => a + (parseFloat(x.g) || 0), 0);
-  const mg = parseFloat((document.getElementById('manualGrams') || {}).value) || 0;
-  if (mg > 0 && (captureMode === 'manual' || captureMode === 'edit')) g = mg;
+  const mgEl = document.getElementById('manualGrams');
+  if (mgEl){
+    if (mgEl.value === '') delete mgEl.dataset.touched;
+    if (!mgEl.dataset.touched && g > 0 && captureMode !== 'barcode') mgEl.value = Math.round(g);
+  }
+  const mg = parseFloat((mgEl || {}).value) || 0;
+  if (mg > 0 && captureMode !== 'barcode') g = mg;
   const q = document.getElementById('barcodeQty');
   if (!g && q && document.getElementById('barcodeQtyField').style.display !== 'none') g = parseFloat(q.value) || 0;
   if (g > 0){ el.textContent = 'Peso totale: ' + Math.round(g) + ' g'; el.classList.add('has-g'); }
   else { el.textContent = 'Tocca i numeri per modificarli'; el.classList.remove('has-g'); }
 }
-document.addEventListener('input', (e) => { if (e.target && (e.target.id === 'barcodeQty' || e.target.id === 'manualGrams')) updateTotalG(); });
+document.addEventListener('input', (e) => { if (e.target && e.target.id === 'manualGrams'){ if (e.target.value === '') delete e.target.dataset.touched; else e.target.dataset.touched = '1'; } if (e.target && (e.target.id === 'barcodeQty' || e.target.id === 'manualGrams')) updateTotalG(); });
 function bumpTotals(x, sign){
   [['resultKcal','k'],['resultCarbs','c'],['resultProtein','p'],['resultFat','f']].forEach(([id, key]) => {
     if (!x[key]) return;
@@ -3668,6 +3738,7 @@ const galleryInput = document.getElementById('galleryInput');
 let camStream = null, camTorchOn = false, camTorchOk = false;
 let camMode = 'ai', camRun = 0;
 function stopCamStream(){
+  try{ camDigital = 1; camVideo.style.transform = ''; camUsingUltra = false; }catch(e){}
   camRun++;
   if (camStream){ camStream.getTracks().forEach(t => t.stop()); camStream = null; }
   camVideo.srcObject = null; camTorchOn = false;
@@ -3694,6 +3765,52 @@ function setCamPref(v){
     else localStorage.setItem('nutrilens_cam', v === 'native' ? 'native|' + Date.now() : v);
   }catch(e){}
 }
+
+/* zoom 0,5× / 1× / 2×: ultra grandangolo se l'iPhone ce l'ha, zoom ottico/nativo se disponibile, altrimenti digitale */
+let camZoom = 1, camDigital = 1, camUltraId = null, camUsingUltra = false;
+const camZoomEl = document.getElementById('camZoom');
+function markZoom(z){ camZoom = z; camZoomEl.querySelectorAll('button').forEach(b => b.classList.toggle('on', parseFloat(b.dataset.z) === z)); const l = camZoomEl.querySelector('[data-z="1"]'); l.textContent = '1×'; camZoomEl.querySelector('[data-z="2"]').textContent = z === 2 ? '2×' : '2'; camZoomEl.querySelector('[data-z="0.5"]').textContent = z === 0.5 ? '0,5×' : '0,5'; }
+async function initZoomUI(){
+  camDigital = 1; camVideo.style.transform = ''; camUsingUltra = false; markZoom(1);
+  try{
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    const u = devs.find(d => d.kind === 'videoinput' && /ultra/i.test(d.label) && !/front|anteriore|frontale|user/i.test(d.label));
+    camUltraId = u ? u.deviceId : null;
+  }catch(e){ camUltraId = null; }
+  document.getElementById('camZ05').style.display = camUltraId ? '' : 'none';
+}
+async function swapCamStream(constraints){
+  const run = camRun;
+  let ns; try{ ns = await navigator.mediaDevices.getUserMedia({ video: constraints, audio: false }); }catch(e){ return false; }
+  if (run !== camRun){ ns.getTracks().forEach(t => t.stop()); return false; }
+  if (camStream) camStream.getTracks().forEach(t => t.stop());
+  camStream = ns; camVideo.srcObject = ns; await camVideo.play().catch(() => {});
+  const caps = (ns.getVideoTracks()[0].getCapabilities && ns.getVideoTracks()[0].getCapabilities()) || {};
+  camTorchOk = !!caps.torch; camTorchOn = false; camFlashBtn.classList.remove('on'); camFlashBtn.classList.toggle('off', !camTorchOk); camFlashLbl.textContent = camTorchOk ? 'Flash' : 'Flash n.d.';
+  return true;
+}
+camZoomEl.addEventListener('click', async (e) => {
+  const b = e.target.closest('button[data-z]'); if (!b || !camStream) return;
+  const z = parseFloat(b.dataset.z); if (z === camZoom) return;
+  if (z === 0.5){
+    if (!camUltraId) return;
+    camDigital = 1; camVideo.style.transform = '';
+    if (await swapCamStream({ deviceId: { exact: camUltraId }, width: { ideal: 1920 }, height: { ideal: 1080 } })){ camUsingUltra = true; markZoom(0.5); }
+    return;
+  }
+  if (camUsingUltra){
+    if (!await swapCamStream({ facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } })) return;
+    camUsingUltra = false;
+  }
+  const track = camStream.getVideoTracks()[0], caps = (track.getCapabilities && track.getCapabilities()) || {};
+  camDigital = 1; camVideo.style.transform = '';
+  if (caps.zoom && caps.zoom.max >= 1){
+    const target = Math.min(Math.max(z, caps.zoom.min || 1), caps.zoom.max);
+    try{ await track.applyConstraints({ advanced: [{ zoom: target }] }); if (target < z - 0.01){ camDigital = z / target; camVideo.style.transform = 'scale(' + camDigital + ')'; } }
+    catch(err){ if (z > 1){ camDigital = z; camVideo.style.transform = 'scale(' + z + ')'; } }
+  } else if (z > 1){ camDigital = z; camVideo.style.transform = 'scale(' + z + ')'; }
+  markZoom(z);
+});
 async function openCamScreen(mode){
   camMode = mode === 'barcode' ? 'barcode' : 'ai';
   camScreen.classList.toggle('barcode', camMode === 'barcode');
@@ -3722,6 +3839,7 @@ async function openCamScreen(mode){
     camFlashBtn.classList.toggle('off', !camTorchOk);
     camFlashLbl.textContent = camTorchOk ? 'Flash' : 'Flash n.d.';
     await camVideo.play().catch(() => {});
+    initZoomUI();
     if (camMode === 'barcode') startBarcodeDetect(++camRun);
   }catch(err){
     console.error(err);
@@ -4137,7 +4255,7 @@ document.getElementById('camShutter').addEventListener('click', () => {
   }
   const w = camVideo.videoWidth || 1280, h = camVideo.videoHeight || 720;
   captureCanvas.width = w; captureCanvas.height = h;
-  captureCanvas.getContext('2d').drawImage(camVideo, 0, 0, w, h);
+  { const zz = camDigital || 1, sw = w / zz, sh = h / zz; captureCanvas.getContext('2d').drawImage(camVideo, (w - sw) / 2, (h - sh) / 2, sw, sh, 0, 0, w, h); }
   const url = captureCanvas.toDataURL('image/jpeg', 0.88);
   const fx = document.createElement('div'); fx.className = 'cam-flashfx go'; camScreen.appendChild(fx); setTimeout(() => fx.remove(), 400);
   setTimeout(() => { acceptImage(url); closeCamScreen(); }, 180);
@@ -4157,6 +4275,17 @@ async function handlePickedImage(dataUrl){
   acceptImage(dataUrl); closeCamScreen();
 }
 document.getElementById('camClose').addEventListener('click', closeCamScreen);
+document.getElementById('camClose').addEventListener('click', () => {
+  if (captureMode !== 'manual' || currentImageDataUrl) return;
+  /* registrazione manuale senza foto: si apre direttamente il modulo */
+  captureCard.classList.remove('has-photo','no-retake'); captureArea.style.display = 'none'; captureArea.classList.remove('live');
+  preview.style.display = 'none'; retakeBtn.style.display = 'none'; aiActionsRow.style.display = 'none';
+  currentResult = null; currentIngredients = [];
+  document.getElementById('resultLabel').textContent = 'Inserisci i dettagli del piatto';
+  ['resultName','resultKcal','resultProtein','resultCarbs','resultFat','manualGrams'].forEach(id => document.getElementById(id).value = '');
+  renderIngredients(); showManualError(''); showError('');
+  resultCard.classList.add('show'); captureCard.style.display = 'block'; captureCard.scrollTop = 0;
+});
 document.getElementById('camGallery').addEventListener('click', () => { galleryInput.value = ''; galleryInput.click(); });
 galleryInput.addEventListener('change', () => {
   const file = galleryInput.files[0]; if (!file) return;
@@ -4167,7 +4296,7 @@ galleryInput.addEventListener('change', () => {
 const normIngr = (x) => String(x || '').trim().replace(/^[-•\s]+/, '').slice(0, 28);
 function scanPhoto(){ liveHint = []; analyze(); }
 captureArea.addEventListener('click', () => {
-  if (!currentImageDataUrl) (captureMode === 'ai' ? openCamScreen('ai') : openNativeCamera());
+  if (!currentImageDataUrl) openCamScreen('ai');
 });
 
 function openCapture(mode){
@@ -4176,7 +4305,7 @@ function openCapture(mode){
   captureArea.classList.remove('live'); liveHint = [];
   addChoiceOverlay.classList.remove('show');
   document.getElementById('captureTitle').textContent = mode === 'barcode' ? 'Prodotto' : (mode === 'ai' ? 'Riepilogo piatto' : 'Nuovo pasto');
-  captureCard.style.display = (mode === 'ai' || mode === 'barcode') ? 'none' : 'block';
+  captureCard.style.display = 'none';
   currentImageDataUrl = null; currentResult = null; currentIngredients = [];
   stopLiveCamera();
   preview.style.display = 'none'; captureHint.style.display = 'block';
@@ -4185,7 +4314,7 @@ function openCapture(mode){
   renderIngredients();
   showError(''); showManualError('');
   if (mode === 'barcode'){ captureCard.style.display = 'none'; openCamScreen('barcode'); }
-  else if (mode === 'ai') openCamScreen('ai'); else openNativeCamera();
+  else openCamScreen('ai');
 }
 document.getElementById('choiceBarcode').addEventListener('click', () => openCapture('barcode'));
 document.getElementById('choicePhoto').addEventListener('click', () => {
@@ -4475,7 +4604,7 @@ retakeBtn.addEventListener('click', (e) => {
   currentIngredients = []; renderIngredients(); showManualError('');
   barcodeProduct = null; barcodeQtyField.style.display = 'none'; resultCard.classList.remove('show');
   if (captureMode === 'barcode'){ captureCard.style.display = 'none'; openCamScreen('barcode'); }
-  else if (captureMode === 'ai') openCamScreen('ai'); else openNativeCamera();
+  else openCamScreen('ai');
 });
 function closeCaptureSheet(){
   stopLiveCamera(); captureArea.classList.remove('live'); liveHint = [];
@@ -4523,7 +4652,7 @@ document.getElementById('captureRetake').addEventListener('click', () => retakeB
   function refresh(){
     const on = resultCard.classList.contains('show') && captureCard.style.display !== 'none';
     captureCard.classList.toggle('res-on', on);
-    document.getElementById('totalGramsField').style.display = (captureMode === 'manual' || captureMode === 'edit') ? '' : 'none';
+    document.getElementById('totalGramsField').style.display = (captureMode === 'manual' || captureMode === 'edit' || captureMode === 'ai') ? '' : 'none';
     updateTotalG();
     const k = key(); favBtn.classList.toggle('on', !!k && favs().some(f => f.key === k));
   }
@@ -4579,7 +4708,16 @@ document.getElementById('captureRetake').addEventListener('click', () => retakeB
     pcts.forEach((id, i) => { document.getElementById(id).textContent = tot > 0 ? Math.round(kc[i] / tot * 100) + '% delle kcal' : '–'; });
   }
   const kIn = document.getElementById('resultKcal');
-  function fit(){ if (captureCard.style.display === 'none') return; kIn.style.width = (Math.max(2, String(kIn.value).length) + 0.35) + 'ch'; }
+  let fitSpan = null;
+  function fit(){
+    if (captureCard.style.display === 'none') return;
+    if (!fitSpan){ fitSpan = document.createElement('span'); fitSpan.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;left:-9999px;top:0'; document.body.appendChild(fitSpan); }
+    const cs = getComputedStyle(kIn);
+    fitSpan.style.font = cs.font; fitSpan.style.letterSpacing = cs.letterSpacing;
+    fitSpan.textContent = kIn.value || '0';
+    kIn.style.width = (Math.ceil(fitSpan.getBoundingClientRect().width) + 14) + 'px';
+    kIn.style.minWidth = '2ch'; kIn.style.maxWidth = '100%';
+  }
   setInterval(() => { draw(); fit(); }, 250);
   captureCard.addEventListener('scroll', () => captureCard.classList.toggle('scrolled', captureCard.scrollTop > 250), {passive:true});
 })();
@@ -4621,13 +4759,17 @@ function computeFromFoods(componenti, list){
   let tot = {kcal:0,p:0,c:0,g:0,grammi:0}, names = [], righe = [];
   for (const comp of componenti){
     if (!comp) continue;
-    const f = byId[String(comp.id_db || '')], gr = Number(comp.grammi) || 0;
+    let f = byId[String(comp.id_db || '')]; const gr = Number(comp.grammi) || 0;
+    if (!f && comp.nome && gr > 0){ const q = String(comp.nome).toLowerCase().trim(); f = list.find(x => x.nome.toLowerCase() === q) || list.find(x => (x.sinonimi || '').toLowerCase().split(/[,;]/).map(t => t.trim()).includes(q)) || null; }
     let r = null;
     if (f && gr > 0){
       const k = gr / 100;
       r = {n:f.nome.slice(0,40), g:Math.round(gr), k:Math.round(f.kcal_100g*k), p:Math.round(f.proteine_100g*k), c:Math.round(f.carboidrati_100g*k), f:Math.round(f.grassi_100g*k)};
     } else if (isFinite(Number(comp.kcal)) && Number(comp.kcal) > 0 && comp.nome){
       r = {n:String(comp.nome).slice(0,40), g:gr > 0 ? Math.round(gr) : null, k:Math.round(Number(comp.kcal)), p:Math.round(Number(comp.proteine_g) || 0), c:Math.round(Number(comp.carboidrati_g) || 0), f:Math.round(Number(comp.grassi_g) || 0)};
+      /* coerenza: le kcal devono tornare con i macro (4/4/9); se si scostano di oltre il 15% si usano i macro */
+      const km = 4 * r.p + 4 * r.c + 9 * r.f;
+      if (km > 20 && Math.abs(r.k - km) / km > 0.15) r.k = Math.round(km);
     }
     if (!r) return null;
     r.n = r.n.charAt(0).toUpperCase() + r.n.slice(1);
@@ -4655,19 +4797,25 @@ async function analyze(){
     if (!sample){ showError('Analisi AI non disponibile in questa vista.'); return; }
     const limits = await sample.limits().catch(() => null);
     if (!limits || !limits.images){ showError('Questa vista non supporta l\'analisi di immagini.'); return; }
-    const small = await makeThumbnail(currentImageDataUrl, 1400);
+    const small = await makeThumbnail(currentImageDataUrl, 1600);
     const blob = await dataUrlToBlob(small || currentImageDataUrl);
     const foods = await Promise.race([loadFoods(), new Promise(r => setTimeout(() => r([]), 4000))]);
     const dbBlock = foods.length ? `
 
 Database alimenti dell'app (id|nome|sinonimi|valori per 100 g|porzione tipica). Scomponi SEMPRE il piatto nei suoi INGREDIENTI SINGOLI (per esempio pasta, pomodoro, tonno, olio, basilico), mai il piatto intero come unica voce: la pasta al pomodoro diventa "pasta" + "pomodoro" + "olio", non "pasta al pomodoro". Per ogni ingrediente usa la voce del database SOLO se è un ingrediente semplice o crudo (non un piatto cucinato o composto) e stima i grammi visibili nella foto. Se l'ingrediente non c'è nel database metti "id_db": null e stima tu kcal e macro per quei grammi.
 ${foodsForPrompt(foods)}` : '';
-    const prompt=[{role:'user', content:`Guarda la foto del piatto: riconosci gli ingredienti visibili e stima calorie e macronutrienti dell'INTERO piatto così com'è nella foto (la porzione che la persona mangerà), NON per 100 g.
-Procedimento: 1) riconosci ogni ingrediente; 2) stima i grammi reali di ciascuno guardando le dimensioni del piatto, delle posate e delle porzioni (grammi realistici, es. 80 g di pasta cruda, 150 g di sugo, mezza mozzarella 60 g); 3) calcola i valori di ogni ingrediente in base ai suoi grammi e sommali: kcal, proteine, carboidrati e grassi sono il TOTALE di tutto il piatto.${dbBlock}
+    const prompt=[{role:'user', content:`Sei un nutrizionista esperto di cucina italiana. Guarda la foto e stima con la massima precisione gli ingredienti, i grammi e i valori nutrizionali dell'INTERO piatto così com'è nella foto (la porzione che la persona mangerà), NON per 100 g.
+
+METODO (segui l'ordine):
+1) SCALA: individua oggetti di riferimento (piatto piano standard ≈ 26 cm di diametro, piatto fondo ≈ 22 cm, forchetta ≈ 19 cm, bicchiere ≈ 8 cm, mano, confezioni) e usali per stimare dimensioni e spessori reali; scrivi la scala scelta in "scala".
+2) INGREDIENTI: elenca ogni ingrediente visibile e quelli quasi certi anche se poco visibili (olio o burro di cottura, condimenti, formaggio grattugiato, salse, pane). Separa SEMPRE i singoli ingredienti: mai il piatto intero come unica voce (la pasta al pomodoro diventa "pasta" + "pomodoro" + "olio" + "parmigiano").
+3) GRAMMI: stima i grammi di ciascun ingrediente come lo pesa chi cucina. Per pasta, riso, cereali, legumi secchi e simili indica il peso A CRUDO (una porzione normale è 70-100 g di pasta cruda, che nel piatto appare come 160-220 g di pasta cotta; riso 70-90 g crudo; legumi secchi 40-60 g). Per carne e pesce indica il peso a crudo senza ossa o scarti, per verdure e frutta il peso edibile. Evita grammature troppo tonde per tutto: ragiona sul volume visibile.
+4) VALORI: calcola kcal, proteine, carboidrati e grassi di ogni ingrediente per quei grammi (kcal ≈ 4×proteine + 4×carboidrati + 9×grassi) e sommali: i totali sono la somma dei componenti.
+5) CONTROLLO: confronta il totale con una porzione realistica di quel piatto (un primo piatto normale 450-700 kcal, un secondo con contorno 400-700, un'insalata 250-450, una pizza intera 700-1100); se la tua stima è molto fuori, correggi i grammi.${dbBlock}
 
 Rispondi SOLO con un oggetto JSON valido, senza testo prima o dopo:
-{"nome":"nome del piatto in italiano","ingredienti":["ingrediente 1","ingrediente 2"],"componenti":[{"id_db":"id dal database oppure null","nome":"ingrediente singolo","grammi":numero,"kcal":numero per quei grammi,"proteine_g":numero,"carboidrati_g":numero,"grassi_g":numero}],"porzione":"peso totale stimato del piatto es. 350 g","kcal":numero totale del piatto,"proteine_g":numero totale,"carboidrati_g":numero totale,"grassi_g":numero totale}
-"ingredienti" contiene al massimo 8 nomi brevi in italiano (es. "pasta", "pomodoro", "tonno").`}];
+{"scala":"riferimenti usati e dimensione stimata del piatto, max 15 parole","nome":"nome del piatto in italiano","ingredienti":["ingrediente 1","ingrediente 2"],"componenti":[{"id_db":"id dal database oppure null","nome":"ingrediente singolo","grammi":numero,"kcal":numero per quei grammi,"proteine_g":numero,"carboidrati_g":numero,"grassi_g":numero}],"porzione":"peso totale del piatto servito es. 350 g","affidabilita":"alta, media o bassa","kcal":numero totale del piatto,"proteine_g":numero totale,"carboidrati_g":numero totale,"grassi_g":numero totale}
+"ingredienti" contiene al massimo 8 nomi brevi in italiano. "affidabilita" è bassa se la foto è sfocata, scura, il piatto è coperto o le porzioni sono difficili da stimare.`}];
     const res = await sample.json(prompt, {images:[blob], modelTier:'default', signal:ctl.signal});
     clearTimeout(tAbort); clearTimeout(tLong);
     if (!res || typeof res !== 'object') throw {code:'invalid_json'};
@@ -4685,7 +4833,7 @@ Rispondi SOLO con un oggetto JSON valido, senza testo prima o dopo:
       currentIngredients = res.componenti.filter(c => c && c.nome).slice(0, 10).map(c => ({n:String(c.nome).slice(0, 40), g:Number(c.grammi) > 0 ? Math.round(Number(c.grammi)) : null, k:null, p:0, c:0, f:0})); renderIngredients();
     }
     else if (names.length){ currentIngredients = names.map(x => ({n:x.slice(0, 40), g:null, k:null, p:0, c:0, f:0})); renderIngredients(); }
-    document.getElementById('resultLabel').textContent = "Stima dell'AI per l'intero piatto" + (res.porzione ? ' · circa ' + String(res.porzione).replace(/^circa\s*/i,'') : '') + (res._fromDb ? ' · valori dal database alimenti' : '') + (res._demo ? ' · DEMO: piatto simulato, non letto dalla foto' : '') + ' · tocca per modificare';
+    document.getElementById('resultLabel').textContent = "Stima dell'AI per l'intero piatto" + (res.porzione ? ' · circa ' + String(res.porzione).replace(/^circa\s*/i,'') : '') + (res._fromDb ? ' · valori dal database alimenti' : '') + (/bass/i.test(String(res.affidabilita || '')) ? ' · stima incerta: controlla i grammi' : '') + (res._demo ? ' · DEMO: piatto simulato, non letto dalla foto' : '') + ' · tocca per modificare';
   }catch(err){
     console.error(err);
     const code = err && (err.code || err.name || err.message) ? String(err.code || err.name || err.message).slice(0, 60) : 'errore';
@@ -4731,7 +4879,7 @@ saveBtn.addEventListener('click', async () => {
     const entry = {
       nome, porzione: (currentResult && currentResult.porzione) || '', ingr: currentIngredients.map(x => ({n:x.n, g:x.g || null, k:x.k || null, p:x.p || 0, c:x.c || 0, f:x.f || 0})),
       kcal, proteine_g, carboidrati_g, grassi_g,
-      grammi_tot: ((captureMode === 'manual' || captureMode === 'edit') && parseFloat(document.getElementById('manualGrams').value) > 0) ? Math.round(parseFloat(document.getElementById('manualGrams').value)) : null,
+      grammi_tot: ((captureMode !== 'barcode') && parseFloat(document.getElementById('manualGrams').value) > 0) ? Math.round(parseFloat(document.getElementById('manualGrams').value)) : null,
       ingredienti: currentIngredients.map(fmtIng),
       photo: thumb, ts: editingMeal ? editingMeal.ts : Date.now()
     };
