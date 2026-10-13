@@ -682,7 +682,11 @@ body{
   background:linear-gradient(135deg, var(--glass-hl) 0%, transparent 38%); opacity:.55}
 
 /* Weekly calendar */
-.week{display:flex; gap:6px; padding:10px 8px; margin-bottom:16px}
+.week{display:flex; gap:6px; padding:10px 8px; margin-bottom:16px; touch-action:pan-y; user-select:none; -webkit-user-select:none}
+@keyframes weekInNext{from{opacity:0; transform:translateX(46px)} to{opacity:1; transform:none}}
+@keyframes weekInPrev{from{opacity:0; transform:translateX(-46px)} to{opacity:1; transform:none}}
+.week.anim-next .day-btn{animation:weekInNext .32s cubic-bezier(.22,1,.36,1) both}
+.week.anim-prev .day-btn{animation:weekInPrev .32s cubic-bezier(.22,1,.36,1) both}
 .day-btn{
   flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;
   padding:8px 0 9px; border-radius:16px; border:none; background:transparent; cursor:pointer;
@@ -750,7 +754,8 @@ body{
   box-shadow:0 6px 16px rgba(0,0,0,.18), inset 0 1px 0 var(--glass-hl); transition:transform .15s ease;
 }
 .avatar-btn:active{transform:scale(.94)}
-.avatar-btn img, .sheet-avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.avatar-btn,.sheet-avatar{position:relative;overflow:hidden}
+.avatar-btn img, .sheet-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
 
 .seg{display:flex; background:var(--glass); border:1px solid var(--glass-border); border-radius:14px; padding:4px; gap:4px; box-shadow:inset 0 1px 3px rgba(0,0,0,.12)}
 .seg button{flex:1; border:none; background:transparent; color:var(--muted); font-family:inherit; font-weight:600; font-size:.8rem; padding:9px 2px; border-radius:10px; cursor:pointer; transition:background .2s, box-shadow .2s, color .2s}
@@ -1135,75 +1140,51 @@ button.btn{font-family:inherit;font-size:.92rem;font-weight:700;border:none;bord
 
 /* Tab bar */
 .tabdock{
-  position:fixed; left:16px; right:16px; bottom:calc(16px + env(safe-area-inset-bottom,0px));
-  max-width:448px; margin:0 auto; z-index:40; display:flex; align-items:center; gap:12px;
+  position:fixed; left:20px; right:20px; bottom:calc(10px + env(safe-area-inset-bottom,0px));
+  max-width:440px; margin:0 auto; z-index:40; display:flex; align-items:center; gap:10px;
+  --lg-bg:rgba(60,60,64,.34); --lg-edge:rgba(255,255,255,.28); --lg-sel:rgba(255,255,255,.17); --lg-ink:#f2f2f7; --lg-off:rgba(235,235,245,.78);
 }
-.tabbar{
-  position:relative; flex:1; min-width:0; height:72px; display:flex; align-items:center; justify-content:space-around;
-  padding:0 8px; z-index:40; border-radius:36px; overflow:visible; isolation:isolate;
-  background:linear-gradient(168deg, var(--glass-hl) 0%, var(--glass) 38%, var(--glass) 100%);
-  backdrop-filter:blur(40px) saturate(2.6) contrast(1.05); -webkit-backdrop-filter:blur(40px) saturate(2.6) contrast(1.05);
-  border:1px solid var(--glass-border);
+:root[data-theme="light"] .tabdock{--lg-bg:rgba(255,255,255,.42); --lg-edge:rgba(255,255,255,.9); --lg-sel:rgba(120,120,128,.16); --lg-ink:#1c1c1e; --lg-off:rgba(60,60,67,.78)}
+.tabbar,.tab-add{
+  position:relative; isolation:isolate; border-radius:999px; height:62px;
+  background:var(--lg-bg);
+  backdrop-filter:blur(18px) saturate(2.2) brightness(1.08); -webkit-backdrop-filter:blur(18px) saturate(2.2) brightness(1.08);
   box-shadow:
-    0 22px 52px var(--shadow), 0 4px 16px var(--shadow),
-    inset 0 1.5px 0 var(--glass-hl), inset 0 -1.5px 0 rgba(0,0,0,.14),
-    inset 1px 0 0 rgba(255,255,255,.05), inset -1px 0 0 rgba(255,255,255,.05);
-  transition:box-shadow .3s ease;
+    inset 0 0 0 .5px var(--lg-edge),
+    inset 1.5px 1.5px 1px -.5px rgba(255,255,255,.55),
+    inset -1.5px -1.5px 1px -.5px rgba(255,255,255,.25),
+    inset 0 -8px 14px -8px rgba(255,255,255,.12),
+    0 8px 30px rgba(0,0,0,.28), 0 1px 4px rgba(0,0,0,.18);
 }
-.tabbar::before{
-  content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none; z-index:2;
-  background:linear-gradient(122deg, rgba(255,255,255,.22) 0%, rgba(255,255,255,0) 30%, rgba(255,255,255,0) 72%, rgba(255,255,255,.08) 100%);
-  mix-blend-mode:overlay;
-}
-.tabbar::after{
-  content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none; z-index:2;
-  box-shadow:inset 0 0 0 1px rgba(255,255,255,.07), inset 0 .5px 0 1px rgba(170,210,255,.08);
-}
+.tabbar{flex:1; min-width:0; display:flex; align-items:center; padding:4px; overflow:hidden}
 .tab-pill{
-  position:absolute; top:9px; height:54px; left:8px; width:64px; border-radius:20px; z-index:0;
-  background:linear-gradient(170deg, var(--glass-hl), var(--glass-strong) 55%);
-  border:1px solid var(--glass-border);
-  box-shadow:inset 0 1.5px 0 var(--glass-hl), inset 0 -1px 0 rgba(0,0,0,.08), 0 2px 8px rgba(0,0,0,.12);
-  transition:left .45s cubic-bezier(.34,1.56,.64,1), width .45s cubic-bezier(.34,1.56,.64,1), opacity .25s ease;
-  pointer-events:none;
+  position:absolute; top:4px; bottom:4px; left:4px; width:64px; border-radius:999px; z-index:0;
+  background:var(--lg-sel);
+  box-shadow:inset 0 0 0 .5px var(--lg-edge), inset 1px 1px 1px -.5px rgba(255,255,255,.5), 0 2px 8px rgba(0,0,0,.14);
+  transition:left .5s cubic-bezier(.3,1.5,.5,1), width .5s cubic-bezier(.3,1.5,.5,1), opacity .25s ease; pointer-events:none;
 }
 .tab-item{
-  position:relative; z-index:1; background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:4px;
-  color:var(--muted); font-family:inherit; cursor:pointer; flex:1; padding:9px 4px; height:54px;
-  justify-content:center; border-radius:22px; transition:color .25s ease, transform .15s ease;
+  position:relative; z-index:1; background:none; border:none; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
+  color:var(--lg-off); font-family:inherit; cursor:pointer; flex:1; min-width:0; height:54px; padding:0 2px; border-radius:999px;
+  transition:color .25s ease, transform .2s ease;
 }
-.tab-item.active{color:var(--text)}
+.tab-item.active{color:var(--accent)}
 .tab-item:active{transform:scale(.94)}
-.tab-ic{display:flex; transition:transform .35s cubic-bezier(.34,1.56,.64,1), filter .35s ease}
-.tab-ic svg{width:22px;height:22px}
-.tab-item.active .tab-ic{transform:translateY(-1px) scale(1.1)}
-.tab-lb{font-size:.62rem;font-weight:700;letter-spacing:.01em}
+.tab-ic{display:flex}
+.tab-ic svg{width:24px;height:24px}
+.tab-lb{font-size:10px;font-weight:600;letter-spacing:.01em;line-height:1}
 .tab-add{
-  width:68px;height:68px;border-radius:50%;flex-shrink:0; position:relative; overflow:hidden;
-  background:
-    radial-gradient(circle at 34% 26%, var(--accent-light) 0%, var(--accent) 58%, var(--accent) 100%);
-  color:var(--accent-ink); border:none;
-  display:flex;align-items:center;justify-content:center; cursor:pointer;
+  width:62px; flex-shrink:0; border:none; padding:0; display:flex; align-items:center; justify-content:center;
+  color:var(--accent-ink); cursor:pointer; transition:transform .25s cubic-bezier(.3,1.5,.5,1);
+  background:linear-gradient(160deg, var(--accent-light), var(--accent));
   box-shadow:
-    0 0 0 4px var(--glass-strong), 0 0 0 5px var(--glass-border),
-    0 12px 24px var(--accent-shadow), 0 3px 10px rgba(0,0,0,.3),
-    inset 0 1.5px 2px rgba(255,255,255,.8), inset 0 -11px 16px rgba(0,0,0,.24);
-  transition:transform .25s cubic-bezier(.34,1.56,.64,1), box-shadow .25s;
+    inset 0 0 0 .5px rgba(255,255,255,.45),
+    inset 1.5px 1.5px 1px -.5px rgba(255,255,255,.7),
+    inset -1.5px -1.5px 1px -.5px rgba(255,255,255,.3),
+    0 8px 24px var(--accent-shadow), 0 1px 4px rgba(0,0,0,.18);
 }
-.tab-add svg{width:26px;height:26px;position:relative;z-index:1; filter:drop-shadow(0 1px 1px rgba(0,0,0,.15))}
-.tab-add::before{
-  content:''; position:absolute; top:4px; left:9px; width:17px; height:12px; border-radius:50%;
-  background:rgba(255,255,255,.75); filter:blur(3px); pointer-events:none; transform:rotate(-18deg);
-}
-.tab-add::after{
-  content:''; position:absolute; top:2px; left:7px; right:7px; height:42%; border-radius:50% 50% 60% 60% / 100% 100% 40% 40%;
-  background:linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,0)); pointer-events:none;
-}
-.tab-add:active{transform:scale(.9); box-shadow:
-    0 0 0 4px var(--glass-strong), 0 0 0 5px var(--glass-border),
-    0 6px 14px var(--accent-shadow), inset 0 1.5px 2px rgba(255,255,255,.8), inset 0 -11px 16px rgba(0,0,0,.24);}
-
-
+.tab-add svg{width:26px;height:26px}
+.tab-add:active{transform:scale(.9)}
 
 /* Layout home: calorie + acqua, poi macro */
 .top-row{display:flex; gap:10px; margin-bottom:12px; align-items:stretch}
@@ -1527,6 +1508,34 @@ button.btn{font-family:inherit;font-size:.92rem;font-weight:700;border:none;bord
 .capture-sheet .ing-name{font-size:.98rem}
 .capture-sheet .ing-add{border-style:solid; border-radius:24px; background:var(--glass); padding:14px}
 .capture-sheet .ing-name-in{font-size:1rem}
+
+.topbar.date-only #greetingText{display:none}
+.topbar.date-only .brand-date{font-size:1.45rem; font-weight:800; color:var(--text); letter-spacing:-.01em}
+
+#captureFav,#captureShare{display:none}
+.capture-sheet.res-on #captureFav,.capture-sheet.res-on #captureShare{display:flex}
+#captureFav.on{color:#FFD60A}
+#captureFav.on svg{fill:#FFD60A}
+.rk-sub.has-g{font-size:.82rem; color:var(--text); font-weight:700}
+.nl-toast{position:fixed; left:50%; bottom:calc(96px + env(safe-area-inset-bottom,0px)); transform:translateX(-50%); z-index:200; padding:10px 16px; border-radius:999px; background:rgba(40,40,44,.92); color:#fff; font-size:.85rem; font-weight:600; box-shadow:0 8px 24px rgba(0,0,0,.35); pointer-events:none; animation:sheetUp .25s ease}
+
+.tb-actions{display:flex; align-items:center; gap:10px}
+.fav-screen{position:fixed; inset:0; z-index:70; background:var(--bg1); display:none; flex-direction:column; overflow-y:auto; -webkit-overflow-scrolling:touch}
+.fav-screen.show{display:flex; animation:sheetUp .3s cubic-bezier(.22,1,.36,1)}
+.fav-head{position:sticky; top:0; z-index:2; display:flex; align-items:center; justify-content:space-between; padding:calc(18px + env(safe-area-inset-top,0px)) 18px 12px; background:linear-gradient(var(--bg1) 75%, transparent)}
+.fav-head h2{margin:0; font-size:1.7rem; font-weight:800; letter-spacing:-.02em}
+.fav-head .sheet-close{width:40px; height:40px}
+.fav-list{padding:4px 16px calc(30px + env(safe-area-inset-bottom,0px)); max-width:480px; width:100%; margin:0 auto; display:flex; flex-direction:column; gap:12px}
+.fav-row{display:flex; align-items:center; gap:12px; padding:10px 12px 10px 10px; border-radius:22px; background:linear-gradient(170deg, var(--glass-hl), var(--glass) 60%); border:1px solid var(--glass-border)}
+.fav-thumb{width:58px; height:58px; border-radius:16px; flex-shrink:0; background:var(--glass-strong) center/cover no-repeat; display:flex; align-items:center; justify-content:center; font-size:1.5rem}
+.fav-info{flex:1; min-width:0}
+.fav-name{font-weight:800; font-size:1rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.fav-meta{margin-top:3px; font-size:.76rem; white-space:nowrap; color:var(--muted); font-weight:600}
+.fav-add{border:none; border-radius:999px; padding:9px 14px; font-family:inherit; font-weight:800; font-size:.82rem; background:var(--accent); color:var(--accent-ink); cursor:pointer}
+.fav-add:active{transform:scale(.94)}
+.fav-del{width:30px; height:30px; border-radius:50%; border:none; background:rgba(120,120,128,.22); color:var(--muted); font-size:.8rem; cursor:pointer; flex-shrink:0}
+.fav-empty{text-align:center; color:var(--muted); padding:70px 24px; font-weight:600; line-height:1.5}
+.fav-empty svg{width:54px; height:54px; margin-bottom:12px; opacity:.5}
 </style>
 </head>
 <body>
@@ -1705,7 +1714,10 @@ button.btn{font-family:inherit;font-size:.92rem;font-weight:700;border:none;bord
       <div class="brand" id="greetingText">Ciao</div>
       <div class="brand-date" id="dateStr"></div>
     </div>
-    <button class="avatar-btn" id="avatarBtn">🙂</button>
+    <div class="tb-actions">
+      <button class="avatar-btn" id="favOpenBtn" aria-label="Preferiti"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10a1.5 1.5 0 0 1 1.5 1.5V20L12 15.2 5.5 20V5.5A1.5 1.5 0 0 1 7 4z"/></svg></button>
+      <button class="avatar-btn" id="avatarBtn">🙂</button>
+    </div>
   </div>
 
   <input type="file" id="avatarInput" accept="image/*" style="display:none">
@@ -2210,7 +2222,7 @@ button.btn{font-family:inherit;font-size:.92rem;font-weight:700;border:none;bord
   <div class="scan-screen" id="scanScreen" style="display:none"><img id="scanFrozen" alt=""><button class="scan-cancel" id="scanCancel" aria-label="Annulla">✕</button></div>
 
   <div class="capture-sheet" id="captureCard" style="display:none" role="dialog" aria-modal="true" aria-labelledby="captureTitle">
-    <div class="capture-head"><h2 id="captureTitle">Riepilogo piatto</h2><button class="sheet-close" id="captureRetake" aria-label="Rifai foto"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button><button class="sheet-close" id="captureClose" aria-label="Chiudi">✕</button></div>
+    <div class="capture-head"><h2 id="captureTitle">Riepilogo piatto</h2><button class="sheet-close" id="captureRetake" aria-label="Rifai foto"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button><button class="sheet-close" id="captureFav" aria-label="Salva nei preferiti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10a1.5 1.5 0 0 1 1.5 1.5V20L12 15.2 5.5 20V5.5A1.5 1.5 0 0 1 7 4z"/></svg></button><button class="sheet-close" id="captureShare" aria-label="Condividi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3.5M8 7l4-4 4 4"/><path d="M6 11H5.5A1.5 1.5 0 0 0 4 12.5v6A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5v-6a1.5 1.5 0 0 0-1.5-1.5H18"/></svg></button><button class="sheet-close" id="captureClose" aria-label="Chiudi">✕</button></div>
     <div class="capture" id="captureArea">
       <div class="hint" id="captureHint"><span>📷</span>Tocca per scattare o caricare una foto</div>
       <video id="liveVideo" autoplay playsinline muted style="display:none"></video>
@@ -2288,6 +2300,10 @@ button.btn{font-family:inherit;font-size:.92rem;font-weight:700;border:none;bord
   </div>
 </div>
 
+<div class="fav-screen" id="favScreen" role="dialog" aria-label="Preferiti">
+  <div class="fav-head"><h2>Preferiti</h2><button class="sheet-close" id="favClose" aria-label="Chiudi">✕</button></div>
+  <div class="fav-list" id="favList"></div>
+</div>
 <div class="tabdock" id="tabBar">
 <nav class="tabbar" id="tabNav">
   <div class="tab-pill" id="tabPill"></div>
@@ -2718,7 +2734,17 @@ document.getElementById('avatarInput').addEventListener('change', async (e) => {
   const file = e.target.files[0]; if (!file) return;
   const reader = new FileReader();
   reader.onload = async (ev) => {
-    const thumb = await makeThumbnail(ev.target.result, 200);
+    const thumb = await new Promise(res => {
+      const im = new Image();
+      im.onload = () => {
+        const side = Math.min(im.width, im.height), c = document.createElement('canvas');
+        c.width = c.height = 256;
+        c.getContext('2d').drawImage(im, (im.width - side) / 2, (im.height - side) / 2, side, side, 0, 0, 256, 256);
+        res(c.toDataURL('image/jpeg', 0.85));
+      };
+      im.onerror = () => res(null);
+      im.src = ev.target.result;
+    });
     if (thumb){ localStorage.setItem('nutrilens_avatar', thumb); renderAvatar(); }
   };
   reader.readAsDataURL(file);
@@ -3107,7 +3133,7 @@ function startOfWeek(d){ const day=(d.getDay()+6)%7; const m=new Date(d); m.setD
 function buildWeek(ref){ const s=startOfWeek(ref); return Array.from({length:7},(_,i)=>{const dt=new Date(s); dt.setDate(s.getDate()+i); return dt;}); }
 
 function renderCalendar(){
-  const week = buildWeek(today);
+  const week = buildWeek(selectedDate);
   const row = document.getElementById('weekRow');
   row.innerHTML = week.map((d,i) => {
     const hasMeals = allMeals.some(m => sameDate(new Date(m.ts), d));
@@ -3122,6 +3148,32 @@ function renderCalendar(){
     btn.addEventListener('click', () => { selectedDate = week[i]; refreshView(); });
   });
 }
+
+/* swipe sul calendario: destra = settimana precedente, sinistra = successiva */
+let weekDragged = false;
+function shiftWeek(n){
+  const d = new Date(selectedDate); d.setDate(d.getDate() + 7 * n); selectedDate = d;
+  const row = document.getElementById('weekRow');
+  row.classList.remove('anim-next', 'anim-prev'); void row.offsetWidth;
+  refreshView();
+  row.classList.add(n > 0 ? 'anim-next' : 'anim-prev');
+  setTimeout(() => row.classList.remove('anim-next', 'anim-prev'), 400);
+}
+(function(){
+  const row = document.getElementById('weekRow'); let st = null;
+  row.addEventListener('pointerdown', e => { st = {x:e.clientX, y:e.clientY}; weekDragged = false; });
+  row.addEventListener('pointermove', e => {
+    if (!st) return;
+    const dx = e.clientX - st.x, dy = e.clientY - st.y;
+    if (!weekDragged && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) weekDragged = true;
+  });
+  row.addEventListener('pointerup', e => {
+    if (!st) return; const dx = e.clientX - st.x; st = null;
+    if (weekDragged && Math.abs(dx) > 40) shiftWeek(dx < 0 ? 1 : -1);
+  });
+  row.addEventListener('pointercancel', () => { st = null; });
+  row.addEventListener('click', e => { if (weekDragged){ e.stopPropagation(); e.preventDefault(); weekDragged = false; } }, true);
+})();
 
 function fmtKey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 
@@ -3396,7 +3448,17 @@ function renderIngredients(){
     wrap.appendChild(row);
   });
   const cnt = document.getElementById('ingCount'); if (cnt) cnt.textContent = currentIngredients.length;
+  updateTotalG();
 }
+function updateTotalG(){
+  const el = document.getElementById('rkSub'); if (!el) return;
+  let g = currentIngredients.reduce((a, x) => a + (parseFloat(x.g) || 0), 0);
+  const q = document.getElementById('barcodeQty');
+  if (!g && q && document.getElementById('barcodeQtyField').style.display !== 'none') g = parseFloat(q.value) || 0;
+  if (g > 0){ el.textContent = 'Peso totale: ' + Math.round(g) + ' g'; el.classList.add('has-g'); }
+  else { el.textContent = 'Tocca i numeri per modificarli'; el.classList.remove('has-g'); }
+}
+document.addEventListener('input', (e) => { if (e.target && e.target.id === 'barcodeQty') updateTotalG(); });
 function bumpTotals(x, sign){
   [['resultKcal','k'],['resultCarbs','c'],['resultProtein','p'],['resultFat','f']].forEach(([id, key]) => {
     if (!x[key]) return;
@@ -4074,6 +4136,7 @@ document.getElementById('tabBar').addEventListener('click', (e) => {
   const tab = btn.dataset.tab;
   homePage.style.display = tab === 'home' ? 'block' : 'none';
   progressPage.style.display = tab === 'progress' ? 'block' : 'none';
+  document.querySelector('.topbar').classList.toggle('date-only', tab === 'progress');
   if (typeof setAssistantVisible === 'function') setAssistantVisible(tab === 'assistant');
   if (tab === 'progress'){ renderProgress(); window.scrollTo({top:0, behavior:'smooth'}); }
 });
@@ -4234,6 +4297,75 @@ function closeCaptureSheet(){
 }
 document.getElementById('captureClose').addEventListener('click', closeCaptureSheet);
 document.getElementById('captureRetake').addEventListener('click', () => retakeBtn.click());
+(function(){
+  const scr = document.getElementById('favScreen'), list = document.getElementById('favList');
+  const get = () => { try{ return JSON.parse(localStorage.getItem('nutrilens_favs') || '[]'); }catch(e){ return []; } };
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  function toast(t){ const d = document.createElement('div'); d.className = 'nl-toast'; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2200); }
+  function render(){
+    const f = get();
+    if (!f.length){ list.innerHTML = '<div class="fav-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10a1.5 1.5 0 0 1 1.5 1.5V20L12 15.2 5.5 20V5.5A1.5 1.5 0 0 1 7 4z"/></svg><br>Nessun preferito per ora.<br>Apri un piatto e tocca il segnalibro in alto per salvarlo qui.</div>'; return; }
+    list.innerHTML = f.map((x, i) => '<div class="fav-row" data-i="' + i + '"><div class="fav-thumb"' + (x.photo ? ' style="background-image:url(' + x.photo + ')"' : '') + '>' + (x.photo ? '' : '🍽️') + '</div><div class="fav-info"><div class="fav-name">' + esc(x.nome) + '</div><div class="fav-meta">' + x.kcal + ' kcal · C' + x.carboidrati_g + ' P' + x.proteine_g + ' G' + x.grassi_g + '</div></div><button class="fav-add" data-act="add">Aggiungi</button><button class="fav-del" data-act="del" aria-label="Rimuovi">✕</button></div>').join('');
+  }
+  document.getElementById('favOpenBtn').addEventListener('click', () => { render(); scr.classList.add('show'); scr.scrollTop = 0; });
+  document.getElementById('favClose').addEventListener('click', () => scr.classList.remove('show'));
+  list.addEventListener('click', async (e) => {
+    const b = e.target.closest('button[data-act]'); if (!b) return;
+    const i = parseInt(b.closest('.fav-row').dataset.i, 10), f = get(), x = f[i]; if (!x) return;
+    if (b.dataset.act === 'del'){ f.splice(i, 1); localStorage.setItem('nutrilens_favs', JSON.stringify(f)); render(); return; }
+    const d = new Date(selectedDate), n = new Date(); d.setHours(n.getHours(), n.getMinutes(), n.getSeconds(), 0);
+    const ingr = (x.ingr || []).map(q => Object.assign({}, q));
+    try{
+      await saveMealEntry({nome:x.nome, porzione:'', ingr, ingredienti:ingr.map(fmtIng), kcal:x.kcal, proteine_g:x.proteine_g, carboidrati_g:x.carboidrati_g, grassi_g:x.grassi_g, photo:x.photo || null, ts:d.getTime()}, true);
+      toast('Aggiunto al menu'); scr.classList.remove('show');
+    }catch(err){ console.error(err); toast('Non riuscito'); }
+  });
+})();
+
+(function(){
+  const favBtn = document.getElementById('captureFav'), shareBtn = document.getElementById('captureShare');
+  const favs = () => { try{ return JSON.parse(localStorage.getItem('nutrilens_favs') || '[]'); }catch(e){ return []; } };
+  const key = () => (document.getElementById('resultName').value || '').trim().toLowerCase();
+  const num = id => parseInt(document.getElementById(id).value, 10) || 0;
+  function toast(t){ const d = document.createElement('div'); d.className = 'nl-toast'; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2200); }
+  function totalG(){ const g = currentIngredients.reduce((a, x) => a + (parseFloat(x.g) || 0), 0); return Math.round(g); }
+  function refresh(){
+    const on = resultCard.classList.contains('show') && captureCard.style.display !== 'none';
+    captureCard.classList.toggle('res-on', on);
+    const k = key(); favBtn.classList.toggle('on', !!k && favs().some(f => f.key === k));
+  }
+  setInterval(refresh, 250);
+  favBtn.addEventListener('click', async () => {
+    const k = key(); if (!k){ toast('Dai prima un nome al piatto'); return; }
+    let list = favs();
+    if (list.some(f => f.key === k)){ list = list.filter(f => f.key !== k); localStorage.setItem('nutrilens_favs', JSON.stringify(list)); toast('Rimosso dai preferiti'); refresh(); return; }
+    let photo = null;
+    try{ photo = editingMeal ? (editingMeal.photo || null) : (currentImageDataUrl ? await makeThumbnail(currentImageDataUrl, 200) : null); }catch(e){}
+    list.unshift({key:k, nome:document.getElementById('resultName').value.trim(), kcal:num('resultKcal'), proteine_g:num('resultProtein'), carboidrati_g:num('resultCarbs'), grassi_g:num('resultFat'),
+      ingr: currentIngredients.map(x => ({n:x.n, g:x.g || null, k:x.k || null, p:x.p || 0, c:x.c || 0, f:x.f || 0})), photo});
+    try{ localStorage.setItem('nutrilens_favs', JSON.stringify(list.slice(0, 100))); toast('Aggiunto ai preferiti'); }catch(e){ toast('Spazio esaurito'); }
+    refresh();
+  });
+  shareBtn.addEventListener('click', async () => {
+    const n = document.getElementById('resultName').value.trim() || 'Piatto', g = totalG();
+    let t = n + '\n' + num('resultKcal') + ' kcal' + (g ? ' · ' + g + ' g' : '') + '\nCarboidrati ' + num('resultCarbs') + ' g · Proteine ' + num('resultProtein') + ' g · Grassi ' + num('resultFat') + ' g';
+    if (currentIngredients.length) t += '\n\nIngredienti:\n' + currentIngredients.map(x => '• ' + fmtIng(x)).join('\n');
+    t += '\n\nCon NutriLens';
+    const data = {title: n, text: t};
+    try{
+      const src = editingMeal ? editingMeal.photo : currentImageDataUrl;
+      if (src && src.startsWith('data:') && navigator.canShare){
+        const blob = await (await fetch(src)).blob(); const f = new File([blob], 'piatto.jpg', {type: blob.type || 'image/jpeg'});
+        if (navigator.canShare({files:[f]})) data.files = [f];
+      }
+    }catch(e){}
+    try{
+      if (navigator.share){ await navigator.share(data); return; }
+    }catch(e){ if (e && e.name === 'AbortError') return; }
+    try{ await navigator.clipboard.writeText(t); toast('Copiato negli appunti'); }catch(e){ toast('Condivisione non disponibile'); }
+  });
+})();
+
 /* anello dei macro + percentuali, aggiornati mentre cambi i numeri */
 (function(){
   const ids = ['resultCarbs','resultProtein','resultFat'], cols = ['var(--carbs)','var(--protein)','var(--fat)'], pcts = ['pctCarbs','pctProtein','pctFat'];
