@@ -952,7 +952,12 @@ body:has(#loginSheetOverlay.show) .lg-brand{transform:translateY(-26vh) scale(.7
 .login-divider{display:flex; align-items:center; gap:10px; margin:14px 0; color:var(--muted); font-size:.74rem}
 .login-divider::before,.login-divider::after{content:''; flex:1; height:1px; background:var(--glass-border)}
 .login-email-block{max-height:0; overflow:hidden; opacity:0; transition:max-height .3s, opacity .2s, margin-top .25s}
-.login-email-block.show{max-height:260px; opacity:1; margin-top:14px}
+.login-email-block.show{max-height:420px; opacity:1; margin-top:14px}
+.login-forgot{display:block; margin:0 0 14px auto; background:none; border:none; padding:4px 2px; color:var(--accent-light); font-family:inherit; font-size:.82rem; font-weight:600; cursor:pointer}
+.login-reset-title{font-weight:700; font-size:1rem; text-align:center; margin-bottom:6px}
+.login-reset-text{color:var(--muted); font-size:.82rem; text-align:center; line-height:1.4; margin-bottom:16px}
+.login-reset-err{color:#FF453A; font-size:.78rem; font-weight:600; margin:-6px 0 12px; text-align:center}
+.login-reset-ok{width:46px; height:46px; border-radius:50%; margin:0 auto 12px; display:grid; place-items:center; background:rgba(50,215,75,.16); color:#32D74B; font-size:1.4rem; font-weight:800}
 .onboard-screen{
   position:fixed; inset:0; z-index:85; display:none; align-items:center; justify-content:center;
   background:
@@ -1582,12 +1587,12 @@ button.btn{font-family:inherit;font-size:.92rem;font-weight:700;border:none;bord
 .fav-head h2{margin:0; font-size:1.7rem; font-weight:800; letter-spacing:-.02em}
 .fav-head .sheet-close{width:40px; height:40px}
 .fav-list{padding:4px 16px calc(30px + env(safe-area-inset-bottom,0px)); max-width:480px; width:100%; margin:0 auto; display:flex; flex-direction:column; gap:12px}
-.fav-row{display:flex; align-items:center; gap:12px; padding:10px 12px 10px 10px; border-radius:22px; background:linear-gradient(170deg, var(--glass-hl), var(--glass) 60%); border:1px solid var(--glass-border)}
+.fav-row{cursor:pointer; display:flex; align-items:center; gap:12px; padding:10px 12px 10px 10px; border-radius:22px; background:linear-gradient(170deg, var(--glass-hl), var(--glass) 60%); border:1px solid var(--glass-border)}
 .fav-thumb{width:58px; height:58px; border-radius:16px; flex-shrink:0; background:var(--glass-strong) center/cover no-repeat; display:flex; align-items:center; justify-content:center; font-size:1.5rem}
 .fav-info{flex:1; min-width:0}
 .fav-name{font-weight:800; font-size:1rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .fav-meta{margin-top:3px; font-size:.76rem; white-space:nowrap; color:var(--muted); font-weight:600}
-.fav-add{border:none; border-radius:999px; padding:9px 14px; font-family:inherit; font-weight:800; font-size:.82rem; background:var(--accent); color:var(--accent-ink); cursor:pointer}
+.fav-add{border:none; border-radius:16px; padding:8px 12px; max-width:86px; line-height:1.15; text-align:center; font-family:inherit; font-weight:800; font-size:.76rem; background:var(--accent); color:var(--accent-ink); cursor:pointer}
 .fav-add:active{transform:scale(.94)}
 .fav-del{width:30px; height:30px; border-radius:50%; border:none; background:rgba(120,120,128,.22); color:var(--muted); font-size:.8rem; cursor:pointer; flex-shrink:0}
 .fav-empty{text-align:center; color:var(--muted); padding:70px 24px; font-weight:600; line-height:1.5}
@@ -4877,19 +4882,28 @@ document.getElementById('captureRetake').addEventListener('click', () => retakeB
   function render(){
     const f = get();
     if (!f.length){ list.innerHTML = '<div class="fav-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10a1.5 1.5 0 0 1 1.5 1.5V20L12 15.2 5.5 20V5.5A1.5 1.5 0 0 1 7 4z"/></svg><br>Nessun preferito per ora.<br>Apri un piatto e tocca il segnalibro in alto per salvarlo qui.</div>'; return; }
-    list.innerHTML = f.map((x, i) => '<div class="fav-row" data-i="' + i + '"><div class="fav-thumb"' + (x.photo ? ' style="background-image:url(' + x.photo + ')"' : '') + '>' + (x.photo ? '' : '🍽️') + '</div><div class="fav-info"><div class="fav-name">' + esc(x.nome) + '</div><div class="fav-meta">' + x.kcal + ' kcal · C' + x.carboidrati_g + ' P' + x.proteine_g + ' G' + x.grassi_g + '</div></div><button class="fav-add" data-act="add">Aggiungi</button><button class="fav-del" data-act="del" aria-label="Rimuovi">✕</button></div>').join('');
+    list.innerHTML = f.map((x, i) => '<div class="fav-row" data-i="' + i + '"><div class="fav-thumb"' + (x.photo ? ' style="background-image:url(' + x.photo + ')"' : '') + '>' + (x.photo ? '' : '🍽️') + '</div><div class="fav-info"><div class="fav-name">' + esc(x.nome) + '</div><div class="fav-meta">' + x.kcal + ' kcal</div></div><button class="fav-add" data-act="add">Aggiungi al menu</button><button class="fav-del" data-act="del" aria-label="Rimuovi">✕</button></div>').join('');
   }
   document.getElementById('favOpenBtn').addEventListener('click', () => { render(); scr.classList.add('show'); scr.scrollTop = 0; });
   document.getElementById('favClose').addEventListener('click', () => scr.classList.remove('show'));
   list.addEventListener('click', async (e) => {
-    const b = e.target.closest('button[data-act]'); if (!b) return;
-    const i = parseInt(b.closest('.fav-row').dataset.i, 10), f = get(), x = f[i]; if (!x) return;
+    const b = e.target.closest('button[data-act]');
+    const rowEl = e.target.closest('.fav-row'); if (!rowEl) return;
+    const i = parseInt(rowEl.dataset.i, 10), f = get(), x = f[i]; if (!x) return;
+    if (!b){
+      const d0 = new Date(selectedDate), n0 = new Date(); d0.setHours(n0.getHours(), n0.getMinutes(), n0.getSeconds(), 0);
+      scr.classList.remove('show');
+      openEditMeal({nome:x.nome, porzione:'', ingr:(x.ingr || []).map(q => Object.assign({}, q)), kcal:x.kcal, proteine_g:x.proteine_g, carboidrati_g:x.carboidrati_g, grassi_g:x.grassi_g, grammi_tot:x.grammi_tot || null, photo:x.photo || null, ts:d0.getTime()});
+      document.getElementById('captureTitle').textContent = 'Il tuo piatto';
+      saveBtn.textContent = 'Aggiungi al menu';
+      return;
+    }
     if (b.dataset.act === 'del'){ f.splice(i, 1); localStorage.setItem('nutrilens_favs', JSON.stringify(f)); render(); return; }
     const d = new Date(selectedDate), n = new Date(); d.setHours(n.getHours(), n.getMinutes(), n.getSeconds(), 0);
     const ingr = (x.ingr || []).map(q => Object.assign({}, q));
     try{
       await saveMealEntry({nome:x.nome, porzione:'', ingr, ingredienti:ingr.map(fmtIng), kcal:x.kcal, proteine_g:x.proteine_g, carboidrati_g:x.carboidrati_g, grassi_g:x.grassi_g, grammi_tot:x.grammi_tot || null, photo:x.photo || null, ts:d.getTime()}, true);
-      toast('Aggiunto al menu'); scr.classList.remove('show');
+      toast(sameDate(d, today) ? 'Aggiunto al menu di oggi' : 'Aggiunto al menu del ' + d.getDate() + ' ' + d.toLocaleDateString('it-IT', {month:'long'}).replace(/^./, c => c.toUpperCase())); scr.classList.remove('show');
     }catch(err){ console.error(err); toast('Non riuscito'); }
   });
 })();
