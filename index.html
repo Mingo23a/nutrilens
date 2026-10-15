@@ -1055,6 +1055,14 @@ body:has(#loginSheetOverlay.show) .lg-brand{transform:translateY(-26vh) scale(.7
 .onboard-skip{display:block; margin:18px auto 0; background:none; border:none; color:var(--muted); font-family:inherit; font-size:.82rem; cursor:pointer; padding:6px; transition:opacity .15s}
 .onboard-skip:active{opacity:.6}
 .goal-macros-title{font-size:.8rem;color:var(--muted);font-weight:600;margin:4px 0 10px}
+/* ===== Obiettivo macro ===== */
+.macro-goal-card{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--glass-strong);border:1px solid var(--glass-border);border-radius:16px;padding:12px 14px;margin:2px 0 14px}
+.mg-title{font-weight:700;font-size:.92rem}
+.mg-hint{color:var(--muted);font-size:.72rem;margin-top:2px}
+.mg-field{display:flex;align-items:baseline;gap:4px;background:rgba(127,127,127,.14);border-radius:12px;padding:6px 12px}
+.mg-field input{width:62px;background:none;border:none;color:var(--accent);font-family:inherit;font-size:1.25rem;font-weight:800;outline:none;text-align:right;-moz-appearance:textfield}
+.mg-field input::-webkit-outer-spin-button,.mg-field input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.mg-field span{color:var(--muted);font-size:.85rem;font-weight:600}
 .goal-macro-row{display:flex;align-items:center;gap:10px;background:var(--glass-strong);border:1px solid var(--glass-border);border-radius:14px;padding:9px 14px;margin-bottom:8px}
 .goal-macro-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
 .goal-macro-name{flex:1;font-weight:600;font-size:.88rem}
@@ -1970,10 +1978,10 @@ button.btn{font-family:inherit;font-size:.92rem;font-weight:700;border:none;bord
     <div class="sheet glass" id="macroDetailSheet">
       <div class="sheet-handle"></div>
       <div class="sheet-header">
-        <div><div class="sheet-name" id="macroDetailTitle">Carboidrati</div><div class="sheet-sub" id="macroDetailSub"></div></div>
+        <div><div class="sheet-name" id="macroDetailTitle">Carboidrati</div></div>
         <button class="sheet-close" id="macroDetailClose">✕</button>
       </div>
-      <div class="goal-macro-row" id="macroGoalRow"><div class="goal-macro-name">Obiettivo giornaliero</div><input type="number" id="macroGoalInput" min="1" step="1" inputmode="numeric"><span>g</span></div>
+      <div class="macro-goal-card" id="macroGoalRow"><div class="mg-label"><div class="mg-title">Obiettivo giornaliero</div><div class="mg-hint">Tocca il numero per modificarlo</div></div><div class="mg-field"><input type="number" id="macroGoalInput" min="1" step="1" inputmode="numeric"><span>g</span></div></div>
       <div id="macroDetailList"></div>
     </div>
   </div>
@@ -3574,7 +3582,6 @@ document.getElementById('macroGoalInput').addEventListener('change', () => {
     goalCarbs: CARBS_GOAL, goalProtein: PROTEIN_GOAL, goalFat: FAT_GOAL
   }));
   const eaten = dayMealsCurrent.reduce((s,m) => s + (m[f]||0), 0);
-  document.getElementById('macroDetailSub').textContent = fmtG(eaten) + ' su ' + fmtG(v);
   refreshView();
 });
 document.getElementById('macroGoalInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
@@ -3584,7 +3591,6 @@ function openMacroDetail(field, label){
   macroDetailField = field;
   const goalOf = {carboidrati_g: CARBS_GOAL, proteine_g: PROTEIN_GOAL, grassi_g: FAT_GOAL}[field];
   const eaten = dayMealsCurrent.reduce((s,m) => s + (m[field]||0), 0);
-  document.getElementById('macroDetailSub').textContent = fmtG(eaten) + ' su ' + fmtG(goalOf);
   document.getElementById('macroGoalInput').value = goalOf;
   const items = dayMealsCurrent.filter(m => (m[field]||0) > 0).sort((a,b) => (b[field]||0) - (a[field]||0));
   if (items.length === 0){
@@ -3939,14 +3945,32 @@ function renderIngredients(){
   const cnt = document.getElementById('ingCount'); if (cnt) cnt.textContent = currentIngredients.length;
   updateTotalG();
 }
+let mgBase = null, mgSynced = 0, mgScaling = false;
+function scaleByTotalGrams(newG){
+  if (captureMode === 'barcode') return;
+  if (!mgBase){
+    const num = id => parseFloat(document.getElementById(id).value) || 0;
+    if (!(mgSynced > 0)) return;
+    mgBase = {g:mgSynced, k:num('resultKcal'), p:num('resultProtein'), c:num('resultCarbs'), f:num('resultFat'), ing:currentIngredients.map(x => Object.assign({}, x))};
+  }
+  if (!(newG > 0)) return;
+  const r = newG / mgBase.g; mgScaling = true;
+  document.getElementById('resultKcal').value = Math.round(mgBase.k * r);
+  document.getElementById('resultProtein').value = Math.round(mgBase.p * r);
+  document.getElementById('resultCarbs').value = Math.round(mgBase.c * r);
+  document.getElementById('resultFat').value = Math.round(mgBase.f * r);
+  currentIngredients = mgBase.ing.map(x => Object.assign({}, x, {g:x.g ? Math.round(x.g * r) : x.g, k:x.k ? x.k * r : x.k, p:(x.p || 0) * r, c:(x.c || 0) * r, f:(x.f || 0) * r}));
+  renderIngredients(); mgScaling = false;
+}
 function updateTotalG(){
   const el = document.getElementById('rkSub'); if (!el) return;
   let g = currentIngredients.reduce((a, x) => a + (parseFloat(x.g) || 0), 0);
   const mgEl = document.getElementById('manualGrams');
   if (mgEl){
     if (mgEl.value === '') delete mgEl.dataset.touched;
-    if (!mgEl.dataset.touched && g > 0 && captureMode !== 'barcode') mgEl.value = Math.round(g);
+    if (!mgEl.dataset.touched && g > 0 && captureMode !== 'barcode' && document.activeElement !== mgEl) mgEl.value = Math.round(g);
   }
+  if (!mgScaling && mgEl){ mgBase = null; mgSynced = parseFloat(mgEl.value) || 0; }
   const mg = parseFloat((mgEl || {}).value) || 0;
   if (mg > 0 && captureMode !== 'barcode') g = mg;
   const q = document.getElementById('barcodeQty');
@@ -3954,7 +3978,7 @@ function updateTotalG(){
   if (g > 0){ el.textContent = 'Peso totale: ' + Math.round(g) + ' g'; el.classList.add('has-g'); }
   else { el.textContent = 'Tocca i numeri per modificarli'; el.classList.remove('has-g'); }
 }
-document.addEventListener('input', (e) => { if (e.target && e.target.id === 'manualGrams'){ if (e.target.value === '') delete e.target.dataset.touched; else e.target.dataset.touched = '1'; } if (e.target && (e.target.id === 'barcodeQty' || e.target.id === 'manualGrams')) updateTotalG(); });
+document.addEventListener('input', (e) => { if (e.target && e.target.id === 'manualGrams'){ if (e.target.value === '') delete e.target.dataset.touched; else e.target.dataset.touched = '1'; } if (e.target && e.target.id === 'manualGrams') { scaleByTotalGrams(parseFloat(e.target.value) || 0); mgScaling = true; updateTotalG(); mgScaling = false; } else if (e.target && e.target.id === 'barcodeQty') updateTotalG(); });
 function bumpTotals(x, sign){
   [['resultKcal','k'],['resultCarbs','c'],['resultProtein','p'],['resultFat','f']].forEach(([id, key]) => {
     if (!x[key]) return;
@@ -5192,7 +5216,8 @@ METODO (segui l'ordine):
 2) INGREDIENTI: elenca ogni ingrediente visibile e quelli quasi certi anche se poco visibili (olio o burro di cottura, condimenti, formaggio grattugiato, salse, pane). Separa SEMPRE i singoli ingredienti: mai il piatto intero come unica voce (la pasta al pomodoro diventa "pasta" + "pomodoro" + "olio" + "parmigiano").
 3) GRAMMI: stima i grammi di ciascun ingrediente come lo pesa chi cucina. Per pasta, riso, cereali, legumi secchi e simili indica il peso A CRUDO (una porzione normale è 70-100 g di pasta cruda, che nel piatto appare come 160-220 g di pasta cotta; riso 70-90 g crudo; legumi secchi 40-60 g). Per carne e pesce indica il peso a crudo senza ossa o scarti, per verdure e frutta il peso edibile. Evita grammature troppo tonde per tutto: ragiona sul volume visibile.
 4) VALORI: calcola kcal, proteine, carboidrati e grassi di ogni ingrediente per quei grammi (kcal ≈ 4×proteine + 4×carboidrati + 9×grassi) e sommali: i totali sono la somma dei componenti.
-5) CONTROLLO: confronta il totale con una porzione realistica di quel piatto (un primo piatto normale 450-700 kcal, un secondo con contorno 400-700, un'insalata 250-450, una pizza intera 700-1100); se la tua stima è molto fuori, correggi i grammi.${dbBlock}
+5) DETTAGLI CHE SI SOTTOSTIMANO: l'olio/condimento assorbito (1 cucchiaio d'olio = 10 g = 90 kcal), il formaggio, le salse, il pane a lato, le bevande zuccherate; non dimenticarli se plausibili. Distingui cotto da crudo e fritto da al forno dall'aspetto. Se due piatti sono nella foto, sommali.
+6) CONTROLLO: confronta il totale con una porzione realistica di quel piatto (un primo piatto normale 450-700 kcal, un secondo con contorno 400-700, un'insalata 250-450, una pizza intera 700-1100); se la tua stima è molto fuori, correggi i grammi.${dbBlock}
 
 Rispondi SOLO con un oggetto JSON valido, senza testo prima o dopo:
 {"scala":"riferimenti usati e dimensione stimata del piatto, max 15 parole","nome":"nome del piatto in italiano","ingredienti":["ingrediente 1","ingrediente 2"],"componenti":[{"id_db":"id dal database oppure null","nome":"ingrediente singolo","grammi":numero,"kcal":numero per quei grammi,"proteine_g":numero,"carboidrati_g":numero,"grassi_g":numero}],"porzione":"peso totale del piatto servito es. 350 g","affidabilita":"alta, media o bassa","kcal":numero totale del piatto,"proteine_g":numero totale,"carboidrati_g":numero totale,"grassi_g":numero totale}
@@ -5210,6 +5235,21 @@ Rispondi SOLO con un oggetto JSON valido, senza testo prima o dopo:
     if (!res || typeof res !== 'object') throw {code:'invalid_json'};
     const fromDb = foods.length ? computeFromFoods(res.componenti, foods) : null;
     if (fromDb){ Object.assign(res, {kcal:fromDb.kcal, proteine_g:fromDb.proteine_g, carboidrati_g:fromDb.carboidrati_g, grassi_g:fromDb.grassi_g, porzione:fromDb.porzione}); res._ingredienti = fromDb.ingredienti; res._righe = fromDb.righe; res._fromDb = true; }
+    if (!fromDb && Array.isArray(res.componenti)){
+      const cs = res.componenti.filter(c => c && c.nome && isFinite(Number(c.kcal)) && Number(c.grammi) > 0);
+      if (cs.length){
+        let K = 0, P = 0, C = 0, F = 0;
+        cs.forEach(c => {
+          const p = Math.max(0, Number(c.proteine_g) || 0), cb = Math.max(0, Number(c.carboidrati_g) || 0), f = Math.max(0, Number(c.grassi_g) || 0);
+          const at = 4 * p + 4 * cb + 9 * f; let k = Math.max(0, Number(c.kcal) || 0);
+          if (at > 0 && (k === 0 || Math.abs(k - at) / at > 0.12)) k = at;
+          c.kcal = Math.round(k); c.proteine_g = p; c.carboidrati_g = cb; c.grassi_g = f;
+          K += k; P += p; C += cb; F += f;
+        });
+        res.kcal = Math.round(K); res.proteine_g = Math.round(P); res.carboidrati_g = Math.round(C); res.grassi_g = Math.round(F);
+        res._righeAi = cs.slice(0, 10).map(c => ({n:String(c.nome).slice(0, 40), g:Math.round(Number(c.grammi)), k:c.kcal, p:c.proteine_g, c:c.carboidrati_g, f:c.grassi_g}));
+      }
+    }
     const names = (Array.isArray(res.ingredienti) && res.ingredienti.length ? res.ingredienti : (Array.isArray(res.componenti) ? res.componenti.map(c => c && c.nome) : [])).map(normIngr).filter(Boolean).slice(0, 8);
     if (names.length){
       showLiveChips(names); setScanFound(true);
@@ -5218,11 +5258,20 @@ Rispondi SOLO con un oggetto JSON valido, senza testo prima o dopo:
     }
     currentResult = res; barcodeProduct = null; barcodeQtyField.style.display = 'none'; renderResult(res);
     if (res._righe){ currentIngredients = res._righe; renderIngredients(); }
+    else if (res._righeAi){ currentIngredients = res._righeAi; renderIngredients(); }
     else if (Array.isArray(res.componenti) && res.componenti.some(c => c && c.nome)){
       currentIngredients = res.componenti.filter(c => c && c.nome).slice(0, 10).map(c => ({n:String(c.nome).slice(0, 40), g:Number(c.grammi) > 0 ? Math.round(Number(c.grammi)) : null, k:null, p:0, c:0, f:0})); renderIngredients();
     }
     else if (names.length){ currentIngredients = names.map(x => ({n:x.slice(0, 40), g:null, k:null, p:0, c:0, f:0})); renderIngredients(); }
-    document.getElementById('resultLabel').textContent = "Stima dell'AI per l'intero piatto" + (res.porzione ? ' · circa ' + String(res.porzione).replace(/^circa\s*/i,'') : '') + (res._fromDb ? ' · valori dal database alimenti' : '') + (/bass/i.test(String(res.affidabilita || '')) ? ' · stima incerta: controlla i grammi' : '') + (res._demo ? ' · DEMO: piatto simulato, non letto dalla foto' : '') + ' · tocca per modificare';
+    let sumG = 0;
+    { const mgE = document.getElementById('manualGrams'), pm = /(\d+(?:[.,]\d+)?)\s*g/i.exec(String(res.porzione || ''));
+      sumG = Math.round(currentIngredients.reduce((a, x) => a + (parseFloat(x.g) || 0), 0));
+      if (mgE){
+        if (sumG > 0){ mgE.value = sumG; delete mgE.dataset.touched; }
+        else if (pm){ mgE.value = Math.round(parseFloat(pm[1].replace(',', '.'))); mgE.dataset.touched = '1'; }
+        updateTotalG();
+      } }
+    document.getElementById('resultLabel').textContent = "Stima dell'AI per l'intero piatto" + ((sumG || res.porzione) ? ' · circa ' + (sumG ? sumG + ' g' : String(res.porzione).replace(/^circa\s*/i,'')) : '') + (res._fromDb ? ' · valori dal database alimenti' : '') + (/bass/i.test(String(res.affidabilita || '')) ? ' · stima incerta: controlla i grammi' : '') + (res._demo ? ' · DEMO: piatto simulato, non letto dalla foto' : '') + ' · tocca per modificare';
   }catch(err){
     console.error(err);
     const code = err && (err.code || err.name || err.message) ? String(err.code || err.name || err.message).slice(0, 60) : 'errore';
