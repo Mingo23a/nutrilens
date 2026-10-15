@@ -1710,6 +1710,31 @@ button.btn{font-family:inherit;font-size:.92rem;font-weight:700;border:none;bord
 .capture-sheet #totalGramsField .sheet-input-row{border-radius:18px; padding:12px 16px; background:var(--glass-strong); box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
 .capture-sheet .ingredient-chips:not(:empty){border-radius:26px; box-shadow:0 10px 26px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.08)}
 .capture-sheet .sheet-field>label{color:var(--muted); letter-spacing:.1em}
+/* ===== Impostazioni compatte (tutto in una pagina) ===== */
+#settingsSheet{padding:12px 18px calc(14px + env(safe-area-inset-bottom,0px))}
+#settingsSheet .sheet-handle{margin-bottom:10px}
+#settingsSheet .sheet-header{margin-bottom:10px}
+#settingsSheet .sheet-avatar{width:42px; height:42px; font-size:1.2rem}
+#settingsSheet .change-photo{margin:-8px 0 10px 54px}
+#settingsSheet .settings-section{margin-bottom:12px}
+#settingsSheet .settings-section-title{margin-bottom:6px}
+#settingsSheet .settings-row{padding:10px 14px}
+#settingsSheet .notif-block{padding:10px 14px; margin-bottom:8px}
+#settingsSheet .notif-block[style]{margin-top:8px !important}
+.settings-logout{display:block; width:62%; margin:16px auto 0; padding:10px; border-radius:16px; border:1px solid color-mix(in srgb,#FF453A 40%,var(--glass-border)); background:color-mix(in srgb,#FF453A 10%,transparent); color:#FF453A; font-family:inherit; font-weight:700; font-size:.92rem; cursor:pointer}
+.settings-logout:active{transform:scale(.98)}
+.settings-logout.armed{background:#FF453A; color:#fff}
+/* ===== /Impostazioni compatte ===== */
+/* ===== Finestre più scure in modalità scura ===== */
+:root:not([data-theme="light"]) .sheet.glass{background-color:#0c0c0e; --glass:rgba(22,22,25,.55); --glass-strong:rgba(36,36,40,.7); --glass-hl:rgba(255,255,255,.06); --glass-border:rgba(255,255,255,.09)}
+:root:not([data-theme="light"]) .sheet-overlay{background:rgba(0,0,0,.68)}
+/* ===== /Finestre più scure ===== */
+/* ===== Sport: solo selezionati + tasto + ===== */
+#sportPickerOverlay{z-index:130}
+.onboard-chip.sport-hidden{display:none}
+.onboard-chip.sport-add{justify-content:center; min-width:46px; padding-left:14px; padding-right:14px; font-size:1.15rem; font-weight:700; color:var(--accent-light); border-style:dashed; border-color:color-mix(in srgb,var(--accent) 55%,var(--glass-border))}
+#sportPickerChips{max-height:52vh; overflow-y:auto; -webkit-overflow-scrolling:touch}
+/* ===== /Sport ===== */
 /* ===== /POLISH ===== */
 </style>
 </head>
@@ -1746,6 +1771,18 @@ button.btn{font-family:inherit;font-size:.92rem;font-weight:700;border:none;bord
     <div class="login-tagline lg-sub">Il tuo diario alimentare intelligente</div>
   </div>
 </div>
+
+<div class="sheet-overlay" id="sportPickerOverlay">
+    <div class="sheet glass" id="sportPickerSheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <div><div class="sheet-name">Scegli i tuoi sport</div><div class="sheet-sub">Puoi sceglierne più di uno</div></div>
+        <button class="sheet-close" id="sportPickerClose">✕</button>
+      </div>
+      <div class="onboard-chip-row" id="sportPickerChips"></div>
+      <button class="btn btn-primary" id="sportPickerDone" style="width:100%; margin-top:16px">Fatto</button>
+    </div>
+  </div>
 
 <div class="sheet-overlay" id="loginSheetOverlay">
   <div class="sheet glass" id="loginSheet">
@@ -1897,6 +1934,13 @@ button.btn{font-family:inherit;font-size:.92rem;font-weight:700;border:none;bord
             <button type="button" class="onboard-freq-btn" data-v="7">7+</button>
           </div>
         </div>
+        <div class="onboard-card-divider"></div>
+        <span class="onboard-field-label">Il tuo obiettivo</span>
+        <div class="seg" id="onboardGoalSeg">
+          <button type="button" data-v="lose">Perdere peso</button>
+          <button type="button" data-v="maintain" class="active">Mantenere</button>
+          <button type="button" data-v="gain">Mettere peso</button>
+        </div>
       </div>
     </div>
 
@@ -1926,9 +1970,10 @@ button.btn{font-family:inherit;font-size:.92rem;font-weight:700;border:none;bord
     <div class="sheet glass" id="macroDetailSheet">
       <div class="sheet-handle"></div>
       <div class="sheet-header">
-        <div class="sheet-name" id="macroDetailTitle">Carboidrati</div>
+        <div><div class="sheet-name" id="macroDetailTitle">Carboidrati</div><div class="sheet-sub" id="macroDetailSub"></div></div>
         <button class="sheet-close" id="macroDetailClose">✕</button>
       </div>
+      <div class="goal-macro-row" id="macroGoalRow"><div class="goal-macro-name">Obiettivo giornaliero</div><input type="number" id="macroGoalInput" min="1" step="1" inputmode="numeric"><span>g</span></div>
       <div id="macroDetailList"></div>
     </div>
   </div>
@@ -2113,6 +2158,8 @@ button.btn{font-family:inherit;font-size:.92rem;font-weight:700;border:none;bord
           </div>
         </div>
       </div>
+
+      <button class="settings-logout" id="logoutBtn" type="button">Esci</button>
     </div>
   </div>
 
@@ -2765,6 +2812,7 @@ function proceedFromPermissions(){
     if (tabBarEl) tabBarEl.style.display = 'none';
     setTimeout(() => { loginSheetOverlay.classList.add('show'); }, 3000);
   }
+  try{ document.getElementById('setupName').value = localStorage.getItem('nutrilens_name') || ''; document.getElementById('setupKey').value = localStorage.getItem('nutrilens_apikey') || ''; }catch(e){}
   document.getElementById('setupGo').addEventListener('click', async () => {
     const btn = document.getElementById('setupGo'), msg = document.getElementById('setupMsg');
     const n = document.getElementById('setupName').value.trim(), k = document.getElementById('setupKey').value.replace(/\s+/g, '');
@@ -2845,7 +2893,7 @@ function proceedFromPermissions(){
 (function(){
   const steps = [1,2,3];
   let currentStep = 1;
-  const state = { gender:'m', sports:['nessuno'], freq:0 };
+  const state = { gender:'m', sports:['nessuno'], freq:0, goal:'maintain' };
   const dotsEls = document.querySelectorAll('#onboardDots .onboard-dot');
   const stepEls = document.querySelectorAll('.onboard-step');
   const backBtn = document.getElementById('onboardBackBtn');
@@ -2865,6 +2913,11 @@ function proceedFromPermissions(){
     nextBtn.textContent = currentStep === steps.length ? 'Calcola i miei obiettivi' : 'Avanti';
   }
 
+  document.getElementById('onboardGoalSeg').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    state.goal = b.dataset.v;
+    document.querySelectorAll('#onboardGoalSeg button').forEach(x => x.classList.toggle('active', x === b));
+  });
   document.getElementById('onboardGenderSeg').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     state.gender = b.dataset.v;
@@ -2903,8 +2956,8 @@ function proceedFromPermissions(){
     const height = parseInt(document.getElementById('onbHeight').value, 10) || 170;
     const weight = parseInt(document.getElementById('onbWeight').value, 10) || 70;
     const freq = state.freq;
-    applyAndSaveGoals(calcGoalsFromProfile(state.gender, age, height, weight, freq, 'maintain'));
-    saveProfile({ gender: state.gender, age, height, weight, sports: state.sports, freq, goal: 'maintain' });
+    applyAndSaveGoals(calcGoalsFromProfile(state.gender, age, height, weight, freq, state.goal));
+    saveProfile({ gender: state.gender, age, height, weight, sports: state.sports, freq, goal: state.goal });
     try{ localStorage.setItem('nutrilens_onboarding_done', '1'); }catch(e){}
   }
 
@@ -3058,6 +3111,48 @@ const unitsOverlay = document.getElementById('unitsOverlay');
   document.addEventListener('touchcancel', end, {passive:true});
 })();
 
+(function(){
+  const lb = document.getElementById('logoutBtn'); let armed = false, t = null;
+  lb.addEventListener('click', () => {
+    if (!armed){ armed = true; lb.classList.add('armed'); lb.textContent = 'Tocca di nuovo per uscire'; t = setTimeout(() => { armed = false; lb.classList.remove('armed'); lb.textContent = 'Esci'; }, 3000); return; }
+    clearTimeout(t);
+    try{ localStorage.removeItem('nutrilens_logged_in'); }catch(e){}
+    location.reload();
+  });
+})();
+(function(){
+  const ov = document.getElementById('sportPickerOverlay'), pick = document.getElementById('sportPickerChips');
+  let cur = null;
+  function refresh(box){
+    box.querySelectorAll('button[data-v]:not(.sport-add)').forEach(b => b.classList.toggle('sport-hidden', !b.classList.contains('active')));
+    if (cur === box) pick.querySelectorAll('button[data-v]').forEach(c => { const o = box.querySelector('button[data-v="' + c.dataset.v + '"]'); c.classList.toggle('active', !!o && o.classList.contains('active')); });
+  }
+  function setup(id){
+    const box = document.getElementById(id); if (!box) return;
+    const add = document.createElement('button'); add.type = 'button'; add.className = 'onboard-chip sport-add'; add.dataset.v = '__add'; add.textContent = '+'; add.setAttribute('aria-label', 'Aggiungi sport');
+    box.appendChild(add);
+    box.addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b || b.dataset.v !== '__add') return;
+      e.stopPropagation();
+      cur = box; pick.innerHTML = '';
+      box.querySelectorAll('button[data-v]:not(.sport-add)').forEach(o => { if (o.dataset.v === 'nessuno') return; const c = o.cloneNode(true); c.classList.remove('sport-hidden'); pick.appendChild(c); });
+      refresh(box); ov.classList.add('show');
+    }, true);
+    new MutationObserver(() => refresh(box)).observe(box, {subtree:true, attributes:true, attributeFilter:['class']});
+    refresh(box);
+    setInterval(() => refresh(box), 400);
+  }
+  pick.addEventListener('click', (e) => {
+    const c = e.target.closest('button[data-v]'); if (!c || !cur) return;
+    const o = cur.querySelector('button[data-v="' + c.dataset.v + '"]'); if (o) o.click();
+    refresh(cur);
+  });
+  const close = () => ov.classList.remove('show');
+  document.getElementById('sportPickerClose').addEventListener('click', close);
+  document.getElementById('sportPickerDone').addEventListener('click', close);
+  ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+  setup('onboardSportChips'); setup('piSportChips');
+})();
 const appearanceOverlay = document.getElementById('appearanceOverlay');
 document.getElementById('appearanceRow').addEventListener('click', () => appearanceOverlay.classList.add('show'));
 document.getElementById('appearanceClose').addEventListener('click', () => appearanceOverlay.classList.remove('show'));
@@ -3402,7 +3497,7 @@ function openGoalEdit(target){
     document.getElementById('goalCarbsInput').value = CARBS_GOAL;
     document.getElementById('goalProteinInput').value = PROTEIN_GOAL;
     document.getElementById('goalFatInput').value = FAT_GOAL;
-    goalMacrosBlock.style.display = 'block';
+    goalMacrosBlock.style.display = 'none';
     waterStepBlock.style.display = 'none';
   } else {
     document.getElementById('goalSheetTitle').textContent = 'Obiettivo acqua';
@@ -3469,9 +3564,28 @@ function drawMacroRings(totals){
 /* ---- Dettaglio macro (tap su carboidrati / proteine / grassi) ---- */
 let dayMealsCurrent = [];
 const macroDetailOverlay = document.getElementById('macroDetailOverlay');
+let macroDetailField = null;
+document.getElementById('macroGoalInput').addEventListener('change', () => {
+  const v = parseInt(document.getElementById('macroGoalInput').value, 10), f = macroDetailField;
+  if (!(v > 0) || !f) return;
+  if (f === 'carboidrati_g') CARBS_GOAL = v; else if (f === 'proteine_g') PROTEIN_GOAL = v; else FAT_GOAL = v;
+  localStorage.setItem('nutrilens_settings', JSON.stringify({
+    goalKcal: GOAL_KCAL, goalWater: WATER_GOAL, waterStep: WATER_STEP,
+    goalCarbs: CARBS_GOAL, goalProtein: PROTEIN_GOAL, goalFat: FAT_GOAL
+  }));
+  const eaten = dayMealsCurrent.reduce((s,m) => s + (m[f]||0), 0);
+  document.getElementById('macroDetailSub').textContent = fmtG(eaten) + ' su ' + fmtG(v);
+  refreshView();
+});
+document.getElementById('macroGoalInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
 function openMacroDetail(field, label){
   document.getElementById('macroDetailTitle').textContent = label;
   const list = document.getElementById('macroDetailList');
+  macroDetailField = field;
+  const goalOf = {carboidrati_g: CARBS_GOAL, proteine_g: PROTEIN_GOAL, grassi_g: FAT_GOAL}[field];
+  const eaten = dayMealsCurrent.reduce((s,m) => s + (m[field]||0), 0);
+  document.getElementById('macroDetailSub').textContent = fmtG(eaten) + ' su ' + fmtG(goalOf);
+  document.getElementById('macroGoalInput').value = goalOf;
   const items = dayMealsCurrent.filter(m => (m[field]||0) > 0).sort((a,b) => (b[field]||0) - (a[field]||0));
   if (items.length === 0){
     list.innerHTML = `<div class="macro-detail-empty">Nessun piatto con ${label.toLowerCase()} oggi.</div>`;
